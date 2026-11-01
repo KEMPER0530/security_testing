@@ -1,0 +1,36 @@
+from typing import Protocol, Any
+from site_diagnostics.domain.model import Observation, Scope
+
+
+class Store(Protocol):
+    def get(self, owner: str, key: str) -> dict[str, Any] | None: ...
+    def query(self, owner: str, prefix: str) -> list[dict[str, Any]]: ...
+    def work(self, state: str) -> list[dict[str, Any]]: ...
+    def commit(self, changes: list[dict[str, Any]]) -> None: ...
+
+
+class Fetcher(Protocol):
+    def fetch(self, scope: Scope) -> Observation: ...
+
+
+class Publisher(Protocol):
+    def send(self, owner: str, job_id: str) -> None: ...
+
+
+class Reports(Protocol):
+    def put(self, owner: str, job_id: str, report: dict) -> None: ...
+    def get(self, owner: str, job_id: str) -> dict: ...
+
+
+class Evaluator(Protocol):
+    def calculate(self, vector: str, rationale: dict) -> dict: ...
+
+
+class PdfRenderer(Protocol):
+    def render(self, job: dict, report: dict | None) -> bytes: ...
+
+
+class AiAnalyzer(Protocol):
+    """Future server-side OpenAI adapter. Currently unwired; no outbound AI requests."""
+
+    def analyze(self, report: dict) -> dict: ...

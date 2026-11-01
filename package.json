@@ -1,0 +1,26 @@
+{
+  "name": "security_testing",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @security-testing/web dev",
+    "build": "pnpm --filter @security-testing/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @security-testing/web test",
+    "generate": "openapi-typescript contracts/openapi.json -o packages/api-client/schema.d.ts",
+    "format": "prettier --write apps packages",
+    "lint": "eslint apps/web/src packages/api-client"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1146.1",
+    "eslint": "10.13.0",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
+  }
+}

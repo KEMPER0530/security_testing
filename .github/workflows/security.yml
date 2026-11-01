@@ -1,0 +1,137 @@
+name: Security checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Tests, architecture and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JSII_RUNTIME_PACKAGE_CACHE_ROOT: /tmp/security-testing-jsii
+      PRODUCTION_CONFIG_FILE: infra/cdk/production.example.json
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - uses: pnpm/action-setup@v4
+        with: {version: '11.25.0'}
+      - uses: astral-sh/setup-uv@v6
+        with: {version: '0.8.15', python-version: '3.13', enable-cache: true}
+      - run: make bootstrap
+      - run: make test check
+      - name: Python security analysis
+        run: uvx --python 3.13 --from bandit==1.9.4 bandit -r services/backend/src infra/cdk scripts --severity-level medium --confidence-level medium
+      - run: make generate && git diff --exit-code -- contracts packages/api-client
+      - run: make package synth
+      - run: .venv/bin/python scripts/check_infra.py
+      - name: Synthesize example infrastructure (no production identifiers)
+        run: pnpm exec cdk synth --quiet -c stage=production --output .build/cdk-production
+      - run: .venv/bin/python scripts/check_aws_infra.py
+      - run: .venv/bin/python scripts/check_production.py
+      - name: Select CloudFormation templates
+        run: |
+          mkdir -p .build/cloudformation
+          cp .build/cdk-production/SecurityTesting*.template.json .build/cloudformation/
+      - name: Scan synthesized CloudFormation
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          scan-type: config
+          scan-ref: .build/cloudformation
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          trivy-config: trivy.yaml
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  secrets:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+
+  filesystem:
+    name: Filesystem and IaC scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+          trivy-config: trivy.yaml
+
+  dependencies:
+    name: Python and Node dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PIP_DEFAULT_TIMEOUT: '20'
+      PIP_RETRIES: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - uses: pnpm/action-setup@v4
+        with: {version: '11.25.0'}
+      - uses: astral-sh/setup-uv@v6
+        with: {version: '0.8.15', python-version: '3.13', enable-cache: true}
+      - run: uv sync --python 3.13 --all-packages --frozen
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=moderate
+      - name: Audit Python dependencies (locked application and development environment)
+        run: uvx --python 3.13 --from pip-audit==2.10.1 pip-audit --path .venv/lib/python3.13/site-packages --timeout 20

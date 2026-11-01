@@ -1,0 +1,59 @@
+name: security-testing
+services:
+  localstack:
+    image: localstack/localstack-pro:2026.3.0
+    ports: ["127.0.0.1:4566:4566"]
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Set LOCALSTACK_AUTH_TOKEN in .env}
+      SERVICES: lambda,sqs,dynamodb,dynamodbstreams,s3,apigateway,events,cloudformation,iam,logs,sts,cloudwatch
+      LAMBDA_DOCKER_NETWORK: security-testing-runtime
+      LAMBDA_DOCKER_FLAGS: --add-host=fixture.security-testing.test:172.30.0.10
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    networks: [runtime]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      retries: 12
+  identity:
+    image: quay.io/keycloak/keycloak:26.4.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-admin-only
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["./local/identity/realm.json:/opt/keycloak/data/import/realm.json:ro"]
+    networks: [runtime]
+  fixture:
+    image: nginx:1.28.0-alpine
+    ports: ["127.0.0.1:8081:80"]
+    volumes:
+      - ./local/fixtures/html:/usr/share/nginx/html:ro
+      - ./local/fixtures:/etc/nginx/conf.d:ro
+    networks:
+      fixtures:
+        ipv4_address: 172.31.0.10
+  fixture-gateway:
+    image: nginx:1.28.0-alpine
+    depends_on: [fixture]
+    volumes:
+      - ./local/networking:/etc/nginx/conf.d:ro
+    sysctls:
+      net.ipv4.ip_forward: "0"
+    networks:
+      runtime:
+        ipv4_address: 172.30.0.10
+        aliases: [fixture.security-testing.test]
+      fixtures:
+        ipv4_address: 172.31.0.11
+networks:
+  runtime:
+    name: security-testing-runtime
+    ipam:
+      config: [{subnet: 172.30.0.0/24}]
+  fixtures:
+    name: security-testing-fixtures
+    internal: true
+    ipam:
+      config: [{subnet: 172.31.0.0/24}]

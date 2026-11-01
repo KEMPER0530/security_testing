@@ -1,0 +1,45 @@
+name: Deploy production application
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md', 'readme.txt']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: security-testing-production
+  cancel-in-progress: false
+jobs:
+  application:
+    if: vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+      UV_CACHE_DIR: /tmp/security-testing-uv
+      JSII_RUNTIME_PACKAGE_CACHE_ROOT: /tmp/security-testing-jsii
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - uses: pnpm/action-setup@v4
+        with: {version: '11.25.0'}
+      - uses: astral-sh/setup-uv@v6
+        with: {version: '0.8.15', python-version: '3.13'}
+      - run: make bootstrap
+      - run: make test check
+      - name: Materialize private production settings
+        env:
+          PRODUCTION_CONFIG_JSON: ${{ secrets.PRODUCTION_CONFIG_JSON }}
+        run: .venv/bin/python scripts/write_production_config.py
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          mask-aws-account-id: true
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: Update application (foundation excluded)
+        run: .venv/bin/python scripts/aws_deploy.py

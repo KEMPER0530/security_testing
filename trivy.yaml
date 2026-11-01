@@ -1,0 +1,17 @@
+# Generated packages are checked via lockfiles; generated CloudFormation is scanned separately.
+scan:
+  skip-dirs:
+    - .git
+    - .venv
+    - node_modules
+    - apps/web/node_modules
+    - .build/lambda
+    - .local
+    - tmp
+    - output
+    - cdk.out
+  skip-files:
+    - .env
+    - '**/.env'
+    - '*.tfstate'
+ignorefile: .trivyignore.yaml

@@ -1,0 +1,17 @@
+# Narrow, time-limited design exceptions. See docs/security-ci.md.
+misconfigurations:
+  - id: AVD-AWS-0011
+    paths:
+      - '**/SecurityTestingFoundation.template.json'
+    statement: CloudFront serves public static React assets only. Authenticated API protection and application rate limits are separate. WAF adoption needs a separate cost and traffic review.
+    expired_at: 2027-02-01
+  - id: AVD-AWS-0132
+    paths:
+      - '**/SecurityTestingFoundation.template.json'
+    statement: Both private S3 buckets explicitly use AES256 SSE-S3, block public access, enforce TLS and use IAM/OAC. Customer-managed KMS keys are not a current requirement.
+    expired_at: 2027-02-01
+  - id: AVD-AWS-0096
+    paths:
+      - '**/SecurityTestingFoundation.template.json'
+    statement: Trivy 0.76 does not recognize CloudFormation SqsManagedSseEnabled. check_aws_infra.py independently requires this property to be true for every SQS queue; SSE-SQS remains enabled.
+    expired_at: 2027-02-01

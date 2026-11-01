@@ -1,0 +1,48 @@
+{
+  "realm": "security-testing",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "security-testing-web",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "email",
+        "roles",
+        "basic"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "developer",
+      "enabled": true,
+      "email": "developer@example.test",
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "Developer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-development-only",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
