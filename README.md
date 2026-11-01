@@ -44,7 +44,7 @@ CVSSは公式計算式に従うv4.0の数値です。ただし公開ページの
 
 ![AWSシステム構成図](docs/diagrams/aws-architecture.svg)
 
-青枠は通常配信で再作成しないFoundation、橙枠はApplication、灰枠は既存・外部資源です。
+Foundationは保存データ・認証・配信基盤、Applicationは通常更新するAPIとLambdaです。編集用draw.ioにはAWSアイコンと詳細な区分を含みます。
 図はCDKの接続構成に基づく公開用の概略図です。AWSアイコン付きの編集用draw.ioも同梱しています。
 実環境のURL・アカウント・識別子は図に含めません。
 [編集用draw.io（2ページ）](docs/diagrams/aws-architecture.drawio) / [テキスト版の構成説明](readme.txt)
