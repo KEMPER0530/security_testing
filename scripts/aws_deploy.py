@@ -17,10 +17,15 @@ def run(command, env):
 
 
 def outputs(cf, name):
-    return {
-        row["OutputKey"]: row["OutputValue"]
-        for row in cf.describe_stacks(StackName=name)["Stacks"][0].get("Outputs", [])
-    }
+    stack = cf.describe_stacks(StackName=name)["Stacks"][0]
+    mask_identifiers([stack.get("StackId", "")])
+    return {row["OutputKey"]: row["OutputValue"] for row in stack.get("Outputs", [])}
+
+
+def mask_existing_stacks(cf):
+    # The deployment role can describe Foundation outputs, but cannot list its resources.
+    for stack in ("SecurityTestingFoundation", "SecurityTestingApplication"):
+        mask_identifiers(outputs(cf, stack).values())
 
 
 def mask_identifiers(values):
@@ -59,10 +64,7 @@ def main():
         raise SystemExit("The selected AWS account does not match production.json")
     cf = session.client("cloudformation")
     if not args.initial:
-        for stack in ("SecurityTestingFoundation", "SecurityTestingApplication"):
-            mask_identifiers(outputs(cf, stack).values())
-            resources = cf.list_stack_resources(StackName=stack)["StackResourceSummaries"]
-            mask_identifiers(item.get("PhysicalResourceId", "") for item in resources)
+        mask_existing_stacks(cf)
     if args.initial:
         try:
             cf.describe_stacks(StackName="CDKToolkit")
