@@ -194,3 +194,24 @@ def test_provisional_severity_is_sorted_and_cvss_remains_unknown():
     assert all(
         f["severity"] != "検出なし" for f in findings if f["status"] in ("未実施", "対象外", "確認不能")
     )
+
+
+def test_fetcher_tls_policy_is_explicit_and_preserves_stronger_context():
+    import ssl
+
+    fetcher = SafeFetcher()
+    assert fetcher.context.minimum_version >= ssl.TLSVersion.TLSv1_2
+    assert fetcher.context.check_hostname
+    assert fetcher.context.verify_mode == ssl.CERT_REQUIRED
+    stronger = ssl.create_default_context()
+    stronger.minimum_version = ssl.TLSVersion.TLSv1_3
+    assert SafeFetcher(context=stronger).context.minimum_version == ssl.TLSVersion.TLSv1_3
+
+
+@pytest.mark.parametrize("minimum,verify,hostname", [(0, 2, True), (771, 0, True), (771, 2, False)])
+def test_fetcher_rejects_a_context_that_weakens_tls(minimum, verify, hostname):
+    from types import SimpleNamespace
+
+    context = SimpleNamespace(minimum_version=minimum, verify_mode=verify, check_hostname=hostname)
+    with pytest.raises(Rejected, match="TLS 1.2"):
+        SafeFetcher(context=context)

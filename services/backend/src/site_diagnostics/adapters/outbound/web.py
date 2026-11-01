@@ -34,7 +34,15 @@ class PinnedHTTPS(http.client.HTTPSConnection):
 class SafeFetcher:
     def __init__(self, fixture_ip=None, fixture_host=None, context=None):
         self.fixture_ip, self.fixture_host = fixture_ip, fixture_host
-        self.context = context or ssl.create_default_context()
+        default_context = ssl.create_default_context()
+        default_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        self.context = context or default_context
+        if (
+            self.context.minimum_version < ssl.TLSVersion.TLSv1_2
+            or self.context.verify_mode != ssl.CERT_REQUIRED
+            or not self.context.check_hostname
+        ):
+            raise Rejected("TLS 1.2以上・証明書検証・ホスト名検証が必要です")
 
     def addresses(self, scope):
         addresses = sorted(
