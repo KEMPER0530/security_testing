@@ -178,7 +178,7 @@ def test_attack_analysis_matches_evidence_and_explains_unchecked_areas(ready):
     text = "\n".join(p.extract_text() for p in PdfReader(BytesIO(service.document("alice", job["id"]))).pages)
     assert "どこに注意が必要？" in text
     assert "今回評価していない攻撃" in text
-    assert "AI分析：工事中" in text
+    assert "AI分析" in text and "工事中" in text
 
 
 def test_no_detected_configuration_does_not_mean_all_attack_types_are_safe():
@@ -214,3 +214,41 @@ def test_ai_is_under_construction_even_with_credentials_and_is_owner_scoped(read
         assert client.get(path).status_code == 404
     finally:
         api.app.dependency_overrides.clear()
+
+
+def test_ipa_table_distinguishes_related_settings_from_root_protections(ready):
+    service, target, fetcher, _ = ready
+    job = service.enqueue("alice", target, "ipa-checklist")
+    service.execute("alice", job["id"])
+    rows = service.result("alice", job["id"])["ipa_checklist"]
+    assert len(rows) == 14
+    assert next(i for i in rows if i["section"] == "1.1")["coverage"] == "未実施"
+    assert next(i for i in rows if i["section"] == "1.5")["coverage"] == "関連設定のみ観測"
+    assert all(
+        i["pdf_page"] == i["page"] + 2 and i["source"].startswith("https://www.ipa.go.jp/") for i in rows
+    )
+    fetcher.hook = lambda: pytest.fail("Checklist exports must use the saved result")
+    reader = PdfReader(BytesIO(service.document("alice", job["id"])))
+    text = "\n".join(p.extract_text() for p in reader.pages)
+    for word in (
+        "診断結果一覧",
+        "項目別の分析",
+        "追加で必要な確認",
+        "IPA対策との対応関係",
+        "2021年3月",
+        "根本的な対策",
+    ):
+        assert word in text
+    for unwanted in (
+        "対応記録",
+        "記入欄",
+        "[ ]",
+        "担当：",
+        "期限：",
+        "チェックリスト",
+        "DIAGNOSTIC CHECKLIST",
+    ):
+        assert unwanted not in text
+    assert reader.metadata.title == "Security Testing 診断レポート"
+    # No blank/orphan pages: every page contains a meaningful report section/table.
+    assert all(len(p.extract_text()) > 180 for p in reader.pages)

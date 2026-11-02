@@ -57,6 +57,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/diagnostic-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Profiles */
+        get: operations["profiles_v1_diagnostic_profiles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/targets/{target_id}/aws-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Aws */
+        get: operations["read_aws_v1_targets__target_id__aws_connection_get"];
+        /** Configure Aws */
+        put: operations["configure_aws_v1_targets__target_id__aws_connection_put"];
+        /** Prepare Aws */
+        post: operations["prepare_aws_v1_targets__target_id__aws_connection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/scans": {
         parameters: {
             query?: never;
@@ -218,6 +254,24 @@ export interface components {
             /** Result */
             result?: null;
         };
+        /** AwsConnectionResponse */
+        AwsConnectionResponse: {
+            /** External Id */
+            external_id: string;
+            /** Role Arn */
+            role_arn: string | null;
+            /** Template */
+            template: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+        };
+        /** AwsRole */
+        AwsRole: {
+            /** Role Arn */
+            role_arn: string;
+        };
         /** FindingResponse */
         FindingResponse: {
             /** Rule Id */
@@ -289,6 +343,10 @@ export interface components {
             error_code?: string | null;
             /** Findings */
             findings?: components["schemas"]["FindingResponse"][] | null;
+            /** Plan */
+            plan?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** Register */
         Register: {
@@ -297,6 +355,10 @@ export interface components {
         };
         /** ResultResponse */
         ResultResponse: {
+            /** Ipa Checklist */
+            ipa_checklist?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Attack Analysis */
             attack_analysis?: {
                 [key: string]: unknown;
@@ -320,6 +382,30 @@ export interface components {
         Scan: {
             /** Target Id */
             target_id: string;
+            /**
+             * Profile
+             * @default web
+             * @enum {string}
+             */
+            profile: "web" | "network" | "pentest" | "host" | "cloud";
+            /** Checks */
+            checks?: string[] | null;
+            /** Ports */
+            ports?: number[] | null;
+            /** Resources */
+            resources?: {
+                [key: string]: string[];
+            } | null;
+            /**
+             * Region
+             * @default ap-northeast-1
+             */
+            region: string;
+            /**
+             * Authorized
+             * @default false
+             */
+            authorized: boolean;
         };
         /** TargetPage */
         TargetPage: {
@@ -502,6 +588,140 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profiles_v1_diagnostic_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_aws_v1_targets__target_id__aws_connection_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string;
+            };
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AwsConnectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configure_aws_v1_targets__target_id__aws_connection_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string;
+            };
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AwsRole"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AwsConnectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prepare_aws_v1_targets__target_id__aws_connection_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string;
+            };
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AwsConnectionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

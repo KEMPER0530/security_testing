@@ -36,6 +36,20 @@ assert not any(r["Type"] == "AWS::ApiGateway::Account" for r in ar.values())
 for r in ar.values():
     if r["Type"] == "AWS::ApiGateway::RestApi":
         assert "application/pdf" in r["Properties"]["BinaryMediaTypes"]
+assume_policies = []
+for name, resource in ar.items():
+    if resource["Type"] == "AWS::IAM::Policy":
+        for statement in resource["Properties"]["PolicyDocument"]["Statement"]:
+            actions = statement["Action"]
+            if "sts:AssumeRole" in ([actions] if isinstance(actions, str) else actions):
+                assume_policies.append((name, statement))
+assert len(assume_policies) == 1 and assume_policies[0][0].startswith("Worker")
+assert "role/security-testing-audit-*" in json.dumps(assume_policies[0][1]["Resource"])
+assert any(
+    r["Type"] == "AWS::Lambda::Function"
+    and "AUDIT_WORKER_ROLE_ARN" in r["Properties"]["Environment"]["Variables"]
+    for r in ar.values()
+)
 config_path = Path(os.environ.get("PRODUCTION_CONFIG_FILE", "infra/cdk/production.json"))
 if not config_path.exists():
     config_path = Path("infra/cdk/production.example.json")

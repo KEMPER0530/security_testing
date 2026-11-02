@@ -11,6 +11,7 @@ import { identity } from "../infrastructure/identity";
 import { ScanProgress } from "./ScanProgress";
 import { ScanFailure } from "./ScanFailure";
 import { Findings } from "./Findings";
+import { DiagnosticPlan } from "./DiagnosticPlan";
 import { AiAnalysisPending } from "./AttackAnalysis";
 import "./style.css";
 import {
@@ -384,7 +385,12 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
                   [principal, "targets"],
                   (old: Item | undefined) => ({
                     ...(old || { next_offset: null }),
-                    items: [...(old?.items || []), target],
+                    items: [
+                      ...(old?.items || []).filter(
+                        (t: Item) => t.sk !== target.sk,
+                      ),
+                      target,
+                    ],
                   }),
                 );
                 setSelectedId(target.sk);
@@ -474,7 +480,12 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
               act("診断を受け付けています", async () => {
                 const j = check(
                   await client.POST("/v1/scans", {
-                    body: { target_id: id },
+                    body: {
+                      target_id: id,
+                      profile: "web",
+                      region: "ap-northeast-1",
+                      authorized: false,
+                    },
                     params: {
                       header: { "idempotency-key": crypto.randomUUID() },
                     },
@@ -500,6 +511,18 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
                 : "操作の完了を待っています。"}
           </p>
         )}
+        <DiagnosticPlan
+          key={id}
+          client={client}
+          targetId={id}
+          targetUrl={selected?.url || ""}
+          disabled={!canStart}
+          onStarted={(j) => {
+            setJobId(j.id);
+            void cache.invalidateQueries({ queryKey: [principal] });
+            jump("results");
+          }}
+        />
       </section>
       <section
         className="panel results-panel"
@@ -601,6 +624,19 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
                     />
                     <span>
                       <b>{new URL(j.url).host}</b>
+                      <small>
+                        {
+                          (
+                            {
+                              web: "Web公開設定",
+                              network: "ネットワーク",
+                              pentest: "限定Web検証",
+                              host: "AWSホスト",
+                              cloud: "AWSクラウド",
+                            } as Record<string, string>
+                          )[j.plan?.profile || "web"]
+                        }
+                      </small>
                       <small>
                         {new Date(j.created_at).toLocaleString("ja-JP")}
                       </small>

@@ -42,6 +42,7 @@ class JobResponse(BaseModel):
     error: str | None = None
     error_code: str | None = None
     findings: list[FindingResponse] | None = None
+    plan: dict[str, Any] | None = None
 
 
 class JobPage(BaseModel):
@@ -50,12 +51,20 @@ class JobPage(BaseModel):
 
 
 class ResultResponse(BaseModel):
+    ipa_checklist: list[dict[str, Any]] | None = None
     attack_analysis: dict[str, Any] | None = None
     evaluation_policy_version: str | None = None
     job_id: str
     findings: list[FindingResponse]
     coverage: dict[str, Any]
     summary: dict[str, Any]
+
+
+class AwsConnectionResponse(BaseModel):
+    external_id: str
+    role_arn: str | None
+    template: dict[str, Any]
+    status: str
 
 
 class AiAnalysisStatusResponse(BaseModel):
