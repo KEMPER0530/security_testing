@@ -2,7 +2,7 @@
 
 IPA_SOURCE = "https://www.ipa.go.jp/security/vuln/websecurity/ug65p900000196e2-att/000017316.pdf"
 IPA_EDITION = "安全なウェブサイトの作り方 改訂第7版（2021年3月）"
-IPA_NOTICE = "IPA資料を参照して当アプリの確認範囲を整理した独自チェック表です。IPAの認証・完全準拠を示すものではありません。関連ヘッダーの確認だけでは、プログラムの根本的な対策を確認したことにはなりません。"
+IPA_NOTICE = "IPA資料を参照して当アプリの確認範囲を整理した独自の対応表です。IPAの認証・完全準拠を示すものではありません。関連ヘッダーの確認だけでは、プログラムの根本的な対策を確認したことにはなりません。"
 
 # Section and printed page numbers refer to the supplied edition; PDF page is printed page + 2.
 SECTIONS = [

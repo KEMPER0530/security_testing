@@ -231,14 +231,24 @@ def test_ipa_table_distinguishes_related_settings_from_root_protections(ready):
     reader = PdfReader(BytesIO(service.document("alice", job["id"])))
     text = "\n".join(p.extract_text() for p in reader.pages)
     for word in (
-        "診断チェック表",
+        "診断結果一覧",
+        "項目別の分析",
         "追加で必要な確認",
-        "対応記録",
-        "[ ]",
-        "IPA項目",
+        "IPA対策との対応関係",
         "2021年3月",
         "根本的な対策",
     ):
         assert word in text
+    for unwanted in (
+        "対応記録",
+        "記入欄",
+        "[ ]",
+        "担当：",
+        "期限：",
+        "チェックリスト",
+        "DIAGNOSTIC CHECKLIST",
+    ):
+        assert unwanted not in text
+    assert reader.metadata.title == "Security Testing 診断レポート"
     # No blank/orphan pages: every page contains a meaningful report section/table.
     assert all(len(p.extract_text()) > 180 for p in reader.pages)

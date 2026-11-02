@@ -1,4 +1,4 @@
-"""Checklist reports with an embedded Japanese font and explicit observation limits."""
+"""Table-based diagnostic reports with Japanese text and explicit observation limits."""
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -71,7 +71,7 @@ class ReportPdf:
             rightMargin=36,
             topMargin=42,
             bottomMargin=42,
-            title="Security Testing 診断チェックリスト",
+            title="Security Testing 診断レポート",
             author="Security Testing",
         )
         styles = {
@@ -142,7 +142,7 @@ class ReportPdf:
             return table(rows, [84, width - 84], False, extra=[("BACKGROUND", (0, 0), (0, -1), PALE)])
 
         states = {"SUCCEEDED": "診断完了", "FAILED": "診断失敗", "CANCELLED": "キャンセル"}
-        story = [p("SECURITY TESTING / DIAGNOSTIC CHECKLIST", "tiny"), p("診断結果チェックリスト", "title")]
+        story = [p("SECURITY TESTING / DIAGNOSTIC REPORT", "tiny"), p("診断レポート", "title")]
         story.append(
             label_rows(
                 [
@@ -163,7 +163,7 @@ class ReportPdf:
                     [
                         ("理由", job.get("error") or "診断がキャンセルされました。"),
                         (
-                            "チェック結果",
+                            "診断結果",
                             "未実施・確認不能。確認できなかった項目を「問題なし」として扱うことはありません。",
                         ),
                         ("次の対応", "接続先や設定を確認し、新しい診断を完了させてください。"),
@@ -196,26 +196,21 @@ class ReportPdf:
                     f"確認範囲：{report['coverage'].get('scope', '記録なし')}。未確認：{'、'.join(report['coverage'].get('not_tested', []))}",
                     "small",
                 ),
-                p("2. 今回の診断チェック表", "heading"),
+                p("2. 診断結果一覧", "heading"),
             ]
-            rows: list[list] = [["No.", "チェック項目", "判定", "深刻度 / CVSS", "対応記録（記入欄）"]]
-            for i, f in enumerate(findings, 1):
+            rows: list[list] = [["診断項目", "判定", "深刻度", "CVSS"]]
+            for f in findings:
                 rows.append(
                     [
-                        str(i),
                         f["title"],
                         STATUS.get(f["status"], f["status"]),
-                        f"{f.get('severity', '未評価')}（暫定）\n{cvss_label(f)}",
-                        "[ ] 対応済\n[ ] 再確認待ち",
+                        f"{f.get('severity', '未評価')}（暫定）",
+                        cvss_label(f),
                     ]
                 )
             story += [
-                table(rows, [27, 130, 68, 138, width - 363]),
+                table(rows, [158, 78, 86, width - 322]),
                 Spacer(1, 6),
-                p(
-                    "対応記録のチェック欄は利用者が記入する欄です。自動診断の判定を「対応済」と読み替えないでください。",
-                    "tiny",
-                ),
                 p(
                     CVSS_NOTICE
                     if any((f.get("cvss") or {}).get("assessment") == "scenario_reference" for f in findings)
@@ -223,7 +218,7 @@ class ReportPdf:
                     "small",
                 ),
                 PageBreak(),
-                p("3. IPA項目と今回の確認範囲", "title"),
+                p("3. IPA対策との対応関係", "title"),
                 p(IPA_EDITION, "small"),
                 p(IPA_NOTICE, "small"),
                 p("AWSホスト・クラウド診断では、このWeb対策表の項目は未実施です。", "small")
@@ -250,19 +245,17 @@ class ReportPdf:
                 ),
                 p("参照元：" + IPA_SOURCE, "tiny"),
                 PageBreak(),
-                p("4. 項目別の根拠と対策", "title"),
+                p("4. 項目別の分析", "title"),
             ]
-            for i, f in enumerate(findings, 1):
+            for f in findings:
                 cvss = f.get("cvss")
                 rows = [
+                    [p(f["title"], "header"), ""],
                     [
-                        p(f"{i:02d}  {f['title']}", "header"),
-                        p(
-                            f"{STATUS.get(f['status'], f['status'])} / {f.get('priority', '要確認')}",
-                            "header",
-                        ),
+                        "判定 / 優先度",
+                        f"{STATUS.get(f['status'], f['status'])} / {f.get('priority', '要確認')}",
                     ],
-                    ["チェックの目的", f"{f.get('explanation', '説明の記録なし')}\n{f.get('purpose', '')}"],
+                    ["項目の説明", f"{f.get('explanation', '説明の記録なし')}\n{f.get('purpose', '')}"],
                     [
                         "判定基準 / 根拠",
                         f"{f.get('criteria', '判定基準の記録なし')}\n観測：{f.get('evidence', '記録なし')}",
@@ -286,15 +279,19 @@ class ReportPdf:
                             ],
                         ]
                     )
-                rows += [
-                    ["参考資料", f.get("reference", "https://owasp.org/www-project-secure-headers/")],
-                    [
-                        "対応記録",
-                        "[ ] 未着手  [ ] 対応中  [ ] 対応済  [ ] 再確認待ち\n担当：________________  期限：________________",
-                    ],
-                ]
+                rows.append(["参考資料", f.get("reference", "https://owasp.org/www-project-secure-headers/")])
                 story.append(
-                    table(rows, [84, width - 84], extra=[("BACKGROUND", (0, 1), (0, -1), PALE)], padding=5)
+                    table(
+                        rows,
+                        [84, width - 84],
+                        extra=[
+                            ("SPAN", (0, 0), (-1, 0)),
+                            ("NOSPLIT", (0, 0), (-1, 3)),
+                            ("NOSPLIT", (0, -2), (-1, -1)),
+                            ("BACKGROUND", (0, 1), (0, -1), PALE),
+                        ],
+                        padding=5,
+                    )
                 )
                 story.append(Spacer(1, 10))
             analysis = report.get("attack_analysis")
