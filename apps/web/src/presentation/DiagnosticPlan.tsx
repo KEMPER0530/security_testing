@@ -182,7 +182,7 @@ export function DiagnosticPlan({
                     checked={selectedChecks.includes(key)}
                     onChange={() => toggle(key)}
                   />
-                  {String(title)}
+                  <span>{String(title)}</span>
                 </label>
               ))}
             </div>
@@ -212,7 +212,7 @@ export function DiagnosticPlan({
                         setAuthorized(false);
                       }}
                     />
-                    {port}
+                    <span>{port}</span>
                   </label>
                 ))}
               </div>
@@ -378,7 +378,9 @@ export function DiagnosticPlan({
                   disabled={blocked}
                   onChange={(e) => setAuthorized(e.target.checked)}
                 />
-                この対象と選択した検査範囲について、実施する権限・許可があります
+                <span>
+                  この対象と選択した検査範囲について、実施する権限・許可があります
+                </span>
               </label>
             )}
           </div>

@@ -255,3 +255,69 @@ test("限定Web検証をボタンで開始しCORS・OPTIONS・TRACEの実応答�
   expect(removed.status()).toBe(204);
   await expect(selected).toHaveCount(0);
 });
+
+test("全5種類のチェックボックスをPCとスマートフォンで揃える", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "ログインして始める →" }).click();
+  await page.getByLabel("Username or email").fill("developer");
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("local-development-only");
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await expect(page.getByLabel("公開ページの応答・保護設定")).toBeVisible();
+  for (const width of [1440, 390, 360]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const name of [
+      "Web診断",
+      "ペネトレーション（限定検証）",
+      "ネットワーク診断",
+      "AWSホスト診断",
+      "AWSクラウド診断",
+    ]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      const options = page.locator(".diagnostic-configuration .check-option");
+      await expect(options.first()).toBeVisible();
+      const geometry = await options.evaluateAll((labels) =>
+        labels.map((label) => {
+          const input = label.querySelector("input")!;
+          const text = label.querySelector("span")!;
+          const box = input.getBoundingClientRect();
+          const copy = text.getBoundingClientRect();
+          const line = parseFloat(getComputedStyle(text).lineHeight);
+          return {
+            width: box.width,
+            height: box.height,
+            gap: copy.left - box.right,
+            centerDelta: Math.abs(
+              box.top + box.height / 2 - (copy.top + line / 2),
+            ),
+            tapHeight: label.getBoundingClientRect().height,
+          };
+        }),
+      );
+      expect(geometry.length).toBeGreaterThan(0);
+      for (const box of geometry) {
+        expect(box.width).toBeCloseTo(18, 0);
+        expect(box.height).toBeCloseTo(18, 0);
+        expect(box.gap).toBeCloseTo(10, 0);
+        expect(box.centerDelta).toBeLessThan(1);
+        expect(box.tapHeight).toBeGreaterThanOrEqual(44);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      if (name.startsWith("ペネトレーション") && width !== 360) {
+        await page
+          .locator(".diagnostic-configuration")
+          .scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: resolve(`../../.build/checkbox-aligned-${width}.png`),
+        });
+      }
+    }
+  }
+});

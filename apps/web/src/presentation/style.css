@@ -311,7 +311,7 @@ label {
 .input-row button {
   flex-shrink: 0;
 }
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select {
   border: 1px solid #ccddd5;
   border-radius: 7px;
@@ -1052,7 +1052,7 @@ footer span {
   .input-row button {
     width: 100%;
   }
-  input,
+  input:not([type="checkbox"]):not([type="radio"]),
   select {
     font-size: 16px;
   }
@@ -1532,26 +1532,37 @@ footer span {
   font-weight: 700;
   padding: 0 6px;
 }
+.check-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 0;
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.7;
+  cursor: pointer;
+}
+.check-option > input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin: calc((1.7em - 18px) / 2) 0 0;
+  accent-color: #166652;
+}
+.check-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .check-options {
   display: flex;
   flex-wrap: wrap;
   gap: 12px 20px;
 }
-.advanced-diagnostics .check-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  line-height: 1.7;
-  margin: 0;
-  font-weight: 500;
-}
-.advanced-diagnostics input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  margin: 4px 0 0;
-  accent-color: #166652;
-}
+
 .scope-note,
 .execution-manifest {
   padding: 16px;
@@ -1683,21 +1694,7 @@ button.diagnostic-type small {
   font-weight: 700;
   padding: 0 6px;
 }
-.diagnostic-configuration .check-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  line-height: 1.7;
-  margin: 0;
-  font-weight: 500;
-}
-.diagnostic-configuration input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  margin: 4px 0 0;
-  accent-color: #166652;
-}
+
 .diagnostic-configuration textarea {
   width: 100%;
   max-width: 100%;
