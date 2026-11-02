@@ -40,6 +40,12 @@ CVSSは公式計算式に従うv4.0の数値です。ただし公開ページの
 
 制御下のfixtureで機能全体を検証するコマンド：`E2E_REPORTS=1 PLAYWRIGHT_CHANNEL=chrome pnpm --filter @security-testing/web test:e2e reports.e2e.ts --workers=1`。このテストで新規作成した対象と履歴だけを削除します。
 
+## IPAのPDFと選択式診断
+
+PDFは表と対応記録欄を持つチェックリスト形式です。IPA資料の各節に対して、関連設定の観測と未実施の対策を区別します。
+
+ネットワークの接続確認、限定Web検証、AWSの収集済みホスト情報・設定確認を、対象と項目を選んで手動実行できます。AWSには接続用読み取りロールの初回準備が必要です。[使い方・範囲・上限](docs/diagnostic-profiles.md)を確認してください。
+
 ## システム構成図
 
 ![AWSシステム構成図](docs/diagrams/aws-architecture.svg)

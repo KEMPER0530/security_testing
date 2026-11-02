@@ -9,6 +9,7 @@ from site_diagnostics.domain.checks import (
 )
 from site_diagnostics.application.ports import Evaluator
 from site_diagnostics.domain.attack_analysis import analyze
+from site_diagnostics.domain.ipa import ipa_checklist
 
 
 def evaluate(report: dict, evaluator: Evaluator, target_url: str | None = None) -> dict:
@@ -20,6 +21,8 @@ def evaluate(report: dict, evaluator: Evaluator, target_url: str | None = None) 
             explanation, criteria, purpose, reference = CHECKS[code]
             finding.update(explanation=explanation, criteria=criteria, purpose=purpose, reference=reference)
         if finding.get("cvss"):
+            continue
+        if code not in CHECKS and finding.get("criteria"):
             continue
         state = finding["status"]
         finding["cvss_status"] = "適用外"
@@ -60,5 +63,10 @@ def evaluate(report: dict, evaluator: Evaluator, target_url: str | None = None) 
         check_status_counts=dict(Counter(f["status"] for f in data["findings"])),
     )
     data["evaluation_policy_version"] = EVALUATION_VERSION
-    data["attack_analysis"] = analyze(data["findings"], target_url)
+    data["attack_analysis"] = (
+        analyze(data["findings"], target_url)
+        if data.get("coverage", {}).get("profile", "web") == "web"
+        else None
+    )
+    data["ipa_checklist"] = ipa_checklist(data["findings"])
     return data

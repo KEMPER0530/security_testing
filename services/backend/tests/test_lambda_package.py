@@ -41,7 +41,7 @@ def test_trimmed_models_support_all_runtime_clients(tmp_path):
         and isinstance(node.args[0], ast.Constant)
     }
     assert used <= package.RUNTIME_AWS_SERVICES, "Add models when a runtime client is added"
-    for service in used:
+    for service in package.RUNTIME_AWS_SERVICES:
         client = session.client(
             service,
             region_name="ap-northeast-1",

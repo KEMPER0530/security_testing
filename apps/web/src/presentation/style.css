@@ -1495,3 +1495,122 @@ footer span {
     width: 100%;
   }
 }
+
+.advanced-diagnostics {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line, #cfddd7);
+}
+.advanced-diagnostics > summary {
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.7;
+}
+.advanced-diagnostics form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+.advanced-diagnostics select,
+.advanced-diagnostics textarea {
+  width: 100%;
+  max-width: 100%;
+  background: white;
+  border: 1px solid #bfcec8;
+  border-radius: 8px;
+  color: #163d36;
+  padding: 12px;
+  font: inherit;
+}
+.advanced-diagnostics fieldset {
+  min-width: 0;
+  border: 1px solid #cfddd7;
+  border-radius: 10px;
+  padding: 14px;
+}
+.advanced-diagnostics legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.check-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.advanced-diagnostics .check-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.7;
+  margin: 0;
+  font-weight: 500;
+}
+.advanced-diagnostics input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin: 4px 0 0;
+  accent-color: #166652;
+}
+.scope-note,
+.execution-manifest {
+  padding: 16px;
+  border-radius: 10px;
+  background: #edf5f1;
+  overflow-wrap: anywhere;
+}
+.aws-setup {
+  border: 1px solid #cfddd7;
+  border-radius: 10px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.aws-setup ol {
+  padding-left: 22px;
+  line-height: 1.8;
+}
+.aws-setup button {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+}
+.ipa-coverage {
+  margin-top: 20px;
+}
+.ipa-coverage summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.ipa-coverage td,
+.ipa-coverage th {
+  min-width: 140px;
+}
+@media (max-width: 600px) {
+  .aws-setup {
+    padding: 12px;
+  }
+  .check-options {
+    flex-direction: column;
+  }
+  .advanced-diagnostics button {
+    width: 100%;
+  }
+}
+.ipa-table {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-top: 16px;
+}
+.ipa-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ipa-table th,
+.ipa-table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #cfddd7;
+  vertical-align: top;
+}

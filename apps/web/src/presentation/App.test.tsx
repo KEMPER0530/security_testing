@@ -115,6 +115,11 @@ it("登録後の一覧再取得でも新しく登録した対象の選択を維�
       request.method === "POST"
     ) {
       registered = true;
+      // A refetch can already contain the new target before POST resolves.
+      client.setQueryData(["registration-test", "targets"], {
+        items: [oldTarget, newTarget],
+        next_offset: null,
+      });
       return new Response(JSON.stringify(newTarget), {
         status: 201,
         headers: { "content-type": "application/json" },

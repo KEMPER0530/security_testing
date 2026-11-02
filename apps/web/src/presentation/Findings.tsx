@@ -66,11 +66,15 @@ function Cvss({ finding: f }: { finding: Item }) {
               ))}
             </dl>
             <a
-              href="https://www.first.org/cvss/v4.0/specification-document"
+              href={
+                value.version === "4.0"
+                  ? "https://www.first.org/cvss/v4.0/specification-document"
+                  : "https://www.first.org/cvss/v3.1/specification-document"
+              }
               target="_blank"
               rel="noreferrer"
             >
-              CVSS v4.0の仕様 ↗
+              CVSSの仕様 ↗
             </a>
           </details>
         </>
@@ -90,7 +94,7 @@ export function Findings({ report }: { report: Item }) {
           </strong>
         </div>
         <div>
-          <small>設定改善候補</small>
+          <small>検出候補</small>
           <strong>
             {report.summary.configuration_count}
             <span>件</span>
@@ -105,7 +109,7 @@ export function Findings({ report }: { report: Item }) {
         </div>
       </div>
       <p className="muted">
-        深刻度は公開ページの設定観測による暫定評価です。CVSSは、追加の攻撃条件が成立すると仮定した参考スコアです。攻撃の成立や情報漏えいを確認した数値ではありません。各項目の「?」で説明と判定根拠を確認できます。
+        深刻度は観測範囲に基づく評価です。CVSSの「参考」は追加条件を仮定したスコア、提供元評価はInspectorなどが収集した既知脆弱性のスコアです。どちらも今回の攻撃成功を示すものではありません。各項目の「?」で説明と根拠を確認できます。
       </p>
       <p className="muted">
         CVSS深刻度別（参考評価を含む）：
@@ -121,6 +125,38 @@ export function Findings({ report }: { report: Item }) {
       {report.attack_analysis && (
         <AttackAnalysis analysis={report.attack_analysis} />
       )}
+      {report.ipa_checklist && (
+        <details className="ipa-coverage">
+          <summary>IPAの対策項目と確認できた範囲</summary>
+          <p className="muted">
+            IPA「安全なウェブサイトの作り方」を参照した独自の確認範囲表です。関連設定の観測は、各対策全体の合格を意味しません。AWSホスト・クラウド診断ではWeb対策は未実施です。
+          </p>
+          <div className="ipa-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>IPA節・項目</th>
+                  <th>今回の確認</th>
+                  <th>追加で必要な確認</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.ipa_checklist.map((item: Item) => (
+                  <tr key={item.section}>
+                    <td>
+                      <a href={item.source} target="_blank" rel="noreferrer">
+                        {item.section} {item.title} ↗
+                      </a>
+                    </td>
+                    <td>{item.coverage}</td>
+                    <td>{item.additional_verification}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
       <h3 className="checks-heading">チェック項目ごとの結果</h3>
       <div className="findings-table">
         <table>
@@ -129,7 +165,7 @@ export function Findings({ report }: { report: Item }) {
               <th>チェック項目</th>
               <th>判定</th>
               <th>深刻度（暫定）</th>
-              <th>CVSS v4.0</th>
+              <th>CVSS</th>
               <th>対応優先度</th>
               <th>根拠・改善方法</th>
             </tr>
@@ -186,7 +222,7 @@ export function Findings({ report }: { report: Item }) {
                 <dd>{f.severity || "未評価"}</dd>
               </div>
               <div>
-                <dt>CVSS v4.0</dt>
+                <dt>CVSS</dt>
                 <dd>
                   <Cvss finding={f} />
                 </dd>

@@ -34,7 +34,7 @@ export function ScanProgress({
         </div>
       </div>
       <ol className="run-stages" aria-label="診断の進行状況">
-        {["受付", "サイトを確認", "結果を表示"].map((label, index) => (
+        {["受付", "対象を確認", "結果を表示"].map((label, index) => (
           <li
             key={label}
             className={

@@ -8,6 +8,8 @@ from site_diagnostics.adapters.outbound.aws import DynamoStore, SqsPublisher, S3
 from site_diagnostics.adapters.outbound.web import SafeFetcher
 from site_diagnostics.adapters.outbound.cvss import CvssCalculator
 from site_diagnostics.adapters.outbound.pdf import ReportPdf
+from site_diagnostics.adapters.outbound.advanced import AdvancedRunner
+from site_diagnostics.adapters.outbound.aws_audit import AwsAudit
 
 
 @lru_cache
@@ -29,12 +31,16 @@ def service():
         kwargs.update(aws_access_key_id="test", aws_secret_access_key="test")
     fixture_host = "fixture.security-testing.test" if env == "local" else None
     fixture_ip = "172.30.0.10" if env == "local" else None
+    fetcher = SafeFetcher(fixture_ip, fixture_host)
+    audit = AwsAudit(os.environ.get("AUDIT_WORKER_ROLE_ARN"), endpoint)
     return Service(
         DynamoStore(boto3.client("dynamodb", **kwargs), os.environ["TABLE_NAME"]),
-        SafeFetcher(fixture_ip, fixture_host),
+        fetcher,
         SqsPublisher(boto3.client("sqs", **kwargs), os.environ["QUEUE_URL"]),
         S3Reports(boto3.client("s3", **kwargs), os.environ["REPORT_BUCKET"]),
         time.time,
         CvssCalculator(),
         ReportPdf(),
+        AdvancedRunner(fetcher, audit),
+        audit,
     )

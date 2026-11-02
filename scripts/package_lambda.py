@@ -2,7 +2,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-RUNTIME_AWS_SERVICES = frozenset({"dynamodb", "s3", "sqs"})
+RUNTIME_AWS_SERVICES = frozenset(
+    {"dynamodb", "s3", "sqs", "sts", "ssm", "inspector2", "iam", "ec2", "cloudtrail"}
+)
 
 
 def trim_sdk_models(package: Path) -> None:
@@ -66,7 +68,9 @@ def main() -> None:
         root / "services/backend/src/site_diagnostics", out / "site_diagnostics", dirs_exist_ok=True
     )
     trim_sdk_models(out)
-    print("Lambda SDK models: dynamodb, s3, sqs (shared configuration retained)")
+    print(
+        "Lambda SDK models: " + ", ".join(sorted(RUNTIME_AWS_SERVICES)) + " (shared configuration retained)"
+    )
 
 
 if __name__ == "__main__":

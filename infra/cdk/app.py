@@ -109,6 +109,13 @@ class SecurityStack(Stack):
 
         http = function("Api", "site_diagnostics.adapters.inbound.api.handler")
         worker = function("Worker", "site_diagnostics.adapters.inbound.jobs.worker", 60, 2)
+        http.add_environment("AUDIT_WORKER_ROLE_ARN", worker.role.role_arn)
+        worker.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["sts:AssumeRole"],
+                resources=[f"arn:{self.partition}:iam::*:role/security-testing-audit-*"],
+            )
+        )
         dispatcher = function("Dispatcher", "site_diagnostics.adapters.inbound.jobs.dispatch")
         recovery = function("Recovery", "site_diagnostics.adapters.inbound.jobs.recovery")
         for consumer in (http, worker, dispatcher, recovery):

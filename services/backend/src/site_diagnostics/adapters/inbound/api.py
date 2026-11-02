@@ -5,6 +5,7 @@ from site_diagnostics.adapters.inbound.dto import (
     JobPage,
     ResultResponse,
     AiAnalysisStatusResponse,
+    AwsConnectionResponse,
 )
 import os
 import json
@@ -22,6 +23,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from mangum import Mangum
 from site_diagnostics.bootstrap.container import service
 from site_diagnostics.domain.model import Rejected, NotFound, Conflict
+from site_diagnostics.domain.plans import PROFILES, PORTS, plan_for
 
 
 class Register(BaseModel):
@@ -32,6 +34,17 @@ class Register(BaseModel):
 class Scan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target_id: str
+    profile: Literal["web", "network", "pentest", "host", "cloud"] = "web"
+    checks: list[str] | None = Field(default=None, max_length=6)
+    ports: list[int] | None = Field(default=None, max_length=8)
+    resources: dict[str, list[str]] | None = None
+    region: str = Field(default="ap-northeast-1", max_length=30)
+    authorized: bool = False
+
+
+class AwsRole(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role_arn: str = Field(max_length=200)
 
 
 @lru_cache
@@ -184,9 +197,29 @@ def remove(target_id: str, owner: User):
     service().remove(owner, target_id)
 
 
+@app.get("/v1/diagnostic-profiles")
+def profiles(owner: User):
+    return {"profiles": PROFILES, "ports": PORTS}
+
+
+@app.post("/v1/targets/{target_id}/aws-connection", response_model=AwsConnectionResponse)
+def prepare_aws(target_id: str, owner: User):
+    return service().aws_connection(owner, target_id, prepare=True)
+
+
+@app.get("/v1/targets/{target_id}/aws-connection", response_model=AwsConnectionResponse)
+def read_aws(target_id: str, owner: User):
+    return service().aws_connection(owner, target_id)
+
+
+@app.put("/v1/targets/{target_id}/aws-connection", response_model=AwsConnectionResponse)
+def configure_aws(target_id: str, body: AwsRole, owner: User):
+    return service().aws_connection(owner, target_id, arn=body.role_arn)
+
+
 @app.post("/v1/scans", status_code=202, response_model=JobResponse)
 def enqueue(body: Scan, owner: User, idempotency_key: Annotated[str, Header(min_length=1, max_length=128)]):
-    return service().enqueue(owner, body.target_id, idempotency_key)
+    return service().enqueue(owner, body.target_id, idempotency_key, body.model_dump(exclude={"target_id"}))
 
 
 @app.get("/v1/scans", response_model=JobPage)
@@ -273,8 +306,12 @@ def report(job_id: str, owner: User, format: Literal["json", "html"] = "json"):
 def comparison(job_id: str, previous_id: str, owner: User):
     current, previous = service().result(owner, job_id), service().result(owner, previous_id)
     a, b = service().require(owner, f"JOB#{job_id}"), service().require(owner, f"JOB#{previous_id}")
-    if a["target_id"] != b["target_id"] or a["rule_version"] != b["rule_version"]:
-        raise Conflict("同一対象・ルール版の結果だけ比較できます")
+    if (
+        a["target_id"] != b["target_id"]
+        or a["rule_version"] != b["rule_version"]
+        or a.get("plan", plan_for()) != b.get("plan", plan_for())
+    ):
+        raise Conflict("同一対象・ルール版・検査範囲の結果だけ比較できます")
     old = {f["rule_id"]: f for f in previous["findings"]}
     changes = []
     for f in current["findings"]:

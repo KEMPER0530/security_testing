@@ -30,6 +30,14 @@ class PdfRenderer(Protocol):
     def render(self, job: dict, report: dict | None) -> bytes: ...
 
 
+class Diagnostics(Protocol):
+    def run(self, plan: dict, scope: Scope, connection: dict | None) -> dict: ...
+
+
+class AwsConnection(Protocol):
+    def template(self, connection: dict) -> dict: ...
+
+
 class AiAnalyzer(Protocol):
     """Future server-side OpenAI adapter. Currently unwired; no outbound AI requests."""
 
