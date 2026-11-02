@@ -231,6 +231,18 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     }
   }, [scans.data, jobId, selectedId, profile]);
   useEffect(() => {
+    if (!candidateJob || !id || !scans.data) return;
+    if (
+      candidateJob.target_id !== id ||
+      profileOfJob(candidateJob) !== profile
+    ) {
+      setJobId(
+        jobs.find((j) => j.target_id === id && profileOfJob(j) === profile)
+          ?.id || null,
+      );
+    }
+  }, [candidateJob, id, scans.data, profile]);
+  useEffect(() => {
     if (
       jobQuery.error instanceof RequestFailure &&
       jobQuery.error.status === 404
