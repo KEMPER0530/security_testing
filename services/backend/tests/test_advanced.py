@@ -314,6 +314,7 @@ def test_inspector_preserves_provider_cvss_and_records_truncation(ready):
                     {
                         "awsAccountId": ACCOUNT,
                         "resources": [{"id": INSTANCE}],
+                        "findingArn": f"arn:aws:inspector2:ap-northeast-1:{ACCOUNT}:finding/example-stable-id",
                         "title": "Example package vulnerability",
                         "updatedAt": now,
                         "severity": "CRITICAL",
@@ -427,3 +428,98 @@ def test_limited_web_tests_do_not_send_credentials_or_write_methods():
     runner.probe.return_value = (200, {}, MARKER.encode())
     assert runner._check(Scope.parse("https://example.com/"), "trace")["status"] == "問題を検出"
     assert runner.probe.call_args.args[1:] == ("TRACE", {"X-Security-Testing-Probe": MARKER})
+
+
+def test_inspector_identity_survives_reordering_and_comparison_detects_new_cve(ready, monkeypatch):
+    service, target, _, clock = ready
+    audit = AwsAudit(WORKER)
+    now = datetime.now(timezone.utc)
+
+    def item(name):
+        return {
+            "awsAccountId": ACCOUNT,
+            "findingArn": f"arn:aws:inspector2:ap-northeast-1:{ACCOUNT}:finding/{name}",
+            "resources": [{"id": INSTANCE}],
+            "title": name,
+            "severity": "HIGH",
+            "packageVulnerabilityDetails": {"vulnerabilityId": name},
+        }
+
+    def inspect(items):
+        calls = CloudCalls(
+            {
+                "list_coverage": {
+                    "coveredResources": [
+                        {
+                            "resourceId": INSTANCE,
+                            "accountId": ACCOUNT,
+                            "scanType": "PACKAGE",
+                            "scanStatus": {"statusCode": "ACTIVE"},
+                            "lastScannedAt": now,
+                        }
+                    ]
+                },
+                "list_findings": {"findings": [item(n) for n in items]},
+            }
+        )
+        return audit.check("inspector", INSTANCE, ACCOUNT, "ap-northeast-1", calls)
+
+    ab, ba = inspect(["CVE-A", "CVE-B"]), inspect(["CVE-B", "CVE-A"])
+    assert {f["title"]: f["rule_id"] for f in ab} == {f["title"]: f["rule_id"] for f in ba}
+    assert ab[0]["rule_id"] != ab[1]["rule_id"]
+    configure(service, target)
+
+    class Runner:
+        rows = inspect(["CVE-A"])
+
+        def run(self, *args):
+            return {
+                "findings": self.rows,
+                "coverage": {"profile": "host", "scope": "既存情報", "not_tested": ["侵入"]},
+            }
+
+    service.diagnostics = runner = Runner()
+    plan = dict(profile="host", checks=["inspector"], resources={"instances": [INSTANCE]}, authorized=True)
+    before = service.enqueue("alice", target, "before-cve", plan)
+    service.execute("alice", before["id"])
+    clock[0] += 150
+    runner.rows = inspect(["CVE-B"])
+    after = service.enqueue("alice", target, "after-cve", plan)
+    service.execute("alice", after["id"])
+    monkeypatch.setattr(api, "service", lambda: service)
+    api.app.dependency_overrides[api.user] = lambda: "alice"
+    try:
+        response = TestClient(api.app).get(
+            f"/v1/scans/{after['id']}/comparison", params={"previous_id": before["id"]}
+        )
+        assert response.status_code == 200
+        b_id = next(f["rule_id"] for f in runner.rows if "CVE-B" in f["title"])
+        assert next(f["change"] for f in response.json()["items"] if f["rule_id"] == b_id) == "新規"
+        clock[0] += 150
+        service.aws_connection("alice", target, arn=ROLE + "-changed")
+        changed = service.enqueue("alice", target, "changed-connection", plan)
+        service.execute("alice", changed["id"])
+        assert (
+            TestClient(api.app)
+            .get(f"/v1/scans/{changed['id']}/comparison", params={"previous_id": after["id"]})
+            .status_code
+            == 409
+        )
+    finally:
+        api.app.dependency_overrides.clear()
+
+
+def test_inspector_missing_identity_is_incomplete():
+    calls = CloudCalls(
+        {
+            "list_coverage": {"coveredResources": []},
+            "list_findings": {
+                "findings": [
+                    {"awsAccountId": ACCOUNT, "resources": [{"id": INSTANCE}], "title": "missing identifier"}
+                ]
+            },
+        }
+    )
+    rows = AwsAudit(WORKER).check("inspector", INSTANCE, ACCOUNT, "ap-northeast-1", calls)
+    assert len(rows) == 1 and rows[0]["status"] == "確認不能"
+    assert "識別子の欠落=True" in rows[0]["evidence"]

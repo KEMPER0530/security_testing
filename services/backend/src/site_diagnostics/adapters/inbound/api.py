@@ -310,8 +310,9 @@ def comparison(job_id: str, previous_id: str, owner: User):
         a["target_id"] != b["target_id"]
         or a["rule_version"] != b["rule_version"]
         or a.get("plan", plan_for()) != b.get("plan", plan_for())
+        or a.get("aws_connection") != b.get("aws_connection")
     ):
-        raise Conflict("同一対象・ルール版・検査範囲の結果だけ比較できます")
+        raise Conflict("同一対象・ルール版・検査範囲・AWS接続の結果だけ比較できます")
     old = {f["rule_id"]: f for f in previous["findings"]}
     changes = []
     for f in current["findings"]:

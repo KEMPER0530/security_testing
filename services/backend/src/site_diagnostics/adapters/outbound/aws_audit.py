@@ -1,6 +1,7 @@
 """Read-only cross-account configuration and collected vulnerability evidence."""
 
 import json
+import hashlib
 import re
 import time
 from datetime import datetime, timezone
@@ -435,17 +436,23 @@ class AwsAudit:
             sortCriteria={"field": "SEVERITY", "sortOrder": "DESC"},
         )
         results = []
-        for number, item in enumerate(data.get("findings", [])):
+        missing_identity = False
+        for item in data.get("findings", []):
             if item.get("awsAccountId") != account or not any(
                 r.get("id") == resource for r in item.get("resources", [])
             ):
                 continue
+            identity = item.get("findingArn")
+            if not isinstance(identity, str) or not identity:
+                missing_identity = True
+                continue
+            code = hashlib.sha256(f"{resource}|{identity}".encode()).hexdigest()[:24]
             scores = item.get("packageVulnerabilityDetails", {}).get("cvss", [])
             score = next((provided_cvss(v) for v in scores if provided_cvss(v)), None)
             vulnerability = item.get("packageVulnerabilityDetails", {}).get("vulnerabilityId", "識別子なし")
             results.append(
                 row(
-                    f"INSPECTOR_{number}",
+                    f"INSPECTOR_{code}",
                     "Inspector検出 " + vulnerability,
                     "問題を検出",
                     f"{item.get('title', '')[:180]}。最終更新：{item.get('updatedAt', '不明')}。AWS収集情報であり、今回の侵入成功を示しません。",
@@ -460,8 +467,10 @@ class AwsAudit:
             row(
                 "INSPECTOR_COVERAGE",
                 "Inspector確認範囲",
-                "問題を検出せず" if fresh and not data.get("nextToken") else "確認不能",
-                f"今回取得した検出 {len(results)}件。検査対象の収集が有効かつ7日以内={fresh}。続きあり={bool(data.get('nextToken'))}。最大10件の既存情報です。",
+                "問題を検出せず"
+                if fresh and not data.get("nextToken") and not missing_identity
+                else "確認不能",
+                f"今回取得した検出 {len(results)}件。検査対象の収集が有効かつ7日以内={fresh}。続きあり={bool(data.get('nextToken'))}、識別子の欠落={missing_identity}。最大10件の既存情報です。",
                 "InspectorのEC2パッケージ検査を有効にし、未収集や続きの検出をInspectorで確認する",
                 explanation="AWSの脆弱性検査がこのサーバーを検査対象にし、最近の情報を持っているか確認します。情報がなければ、検出が0件でも安全とは言えません。",
                 criteria="収集範囲・有効状態・最終検査日時を別判定。0件でも未収集時は安全と判定しません。",

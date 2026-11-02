@@ -44,7 +44,7 @@ PROFILES: dict[str, dict] = {
         "scope": "指定AWSリソースの読み取り専用設定検査",
     },
 }
-ADVANCED_RULE_VERSION = "2026-11-02.1"
+ADVANCED_RULE_VERSION = "2026-11-02.2"
 PORTS = (22, 25, 53, 80, 443, 3306, 3389, 5432, 6379, 8080, 8443)
 ROLE_PATTERN = r"arn:aws:iam::[0-9]{12}:role/security-testing-audit-[A-Za-z0-9+=,.@_-]{1,40}"
 RESOURCE_PATTERNS = {

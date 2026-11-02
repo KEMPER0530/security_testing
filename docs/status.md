@@ -14,7 +14,7 @@
 
 ## 確認済み
 
-Python109件・React31件のテスト、型検査・lint・依存境界検査・ビルド。
+Python111件・React31件のテスト、型検査・lint・依存境界検査・ビルド。
 LocalStackとKeycloak、実Chromeで履歴PDF取得・モバイル説明・作成した検証レコードの削除を確認。
 表形式PDF全7ページをレンダリング確認。追加診断はLocalStack経由の手動DNS/TCP・PDF・AWS接続設定画面を実Chromeで検証。別利用者・削除後の参照拒否、実行中削除・再配送も自動検証。
 
