@@ -40,7 +40,7 @@ it("ログイン前に診断操作を表示せずOIDCログインへ進む", asy
   await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
   fireEvent.click(button);
   await waitFor(() => expect(identity.signinRedirect).toHaveBeenCalledOnce());
-  expect(screen.queryByRole("button", { name: "診断を開始 →" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Web診断を開始 →" })).toBeNull();
 });
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -81,7 +81,7 @@ it("ログイン期限切れで診断画面を閉じ再ログインへ戻す", a
   expect(
     await screen.findByRole("button", { name: "ログインして始める →" }),
   ).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "診断を開始 →" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Web診断を開始 →" })).toBeNull();
   client.clear();
 });
 
@@ -162,7 +162,7 @@ it("登録後の一覧再取得でも新しく登録した対象の選択を維�
   ).toBeNull();
   expect(
     screen
-      .getByRole("button", { name: "診断を開始 →" })
+      .getByRole("button", { name: "Web診断を開始 →" })
       .hasAttribute("disabled"),
   ).toBe(false);
   client.clear();
@@ -413,3 +413,118 @@ it("履歴・対象の削除は確認を要求し、履歴だけ削除しても�
   ]);
   client.clear();
 });
+
+it.each(["web-job", "network-job"])(
+  "診断種類を切り替えて結果を分離し、旧保存ID（%s）からも復元する",
+  async (storedJob) => {
+    const principal = "profile-routing";
+    localStorage.setItem(`security-testing:${principal}:target`, "TARGET#one");
+    localStorage.setItem(`security-testing:${principal}:job`, storedJob);
+    vi.mocked(identity.getUser).mockResolvedValue({
+      access_token: "test-only",
+      expired: false,
+      profile: { sub: principal },
+    } as AuthSession);
+    const target = {
+      sk: "TARGET#one",
+      url: "https://example.com/",
+      host: "example.com",
+      created_at: "2026-11-02T00:00:00Z",
+    };
+    const jobs = ["web", "network"].map((profile) => ({
+      id: `${profile}-job`,
+      target_id: "one",
+      url: target.url,
+      state: "SUCCEEDED",
+      created_at: "2026-11-02T00:00:00Z",
+      plan: { profile },
+    }));
+    const reports = Object.fromEntries(
+      jobs.map((job) => [
+        job.id,
+        {
+          job_id: job.id,
+          plan: job.plan,
+          coverage: {
+            profile: job.plan.profile,
+            scope: `${job.plan.profile}の範囲`,
+            not_tested: [],
+          },
+          summary: { configuration_count: 0, cvss_severity_counts: {} },
+          findings: [
+            {
+              rule_id: job.plan.profile === "web" ? "CSP" : "PORT_443",
+              title:
+                job.plan.profile === "web"
+                  ? "Web-only CSP"
+                  : "Network-only TCP",
+              status: "確認不能",
+              cvss: null,
+            },
+          ],
+        },
+      ]),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const request = input as Request;
+      const path = new URL(request.url).pathname;
+      let data: unknown = {};
+      if (path.endsWith("/diagnostic-profiles"))
+        data = {
+          profiles: {
+            web: { checks: { headers: "公開設定" } },
+            network: { checks: { dns: "DNS" } },
+            host: { checks: { inventory: "Inventory" } },
+          },
+        };
+      else if (path.endsWith("/targets"))
+        data = { items: [target], next_offset: null };
+      else if (path.endsWith("/scans"))
+        data = { items: jobs, next_offset: null };
+      else if (path.endsWith("/aws-connection"))
+        return new Response(JSON.stringify({ error: { message: "未設定" } }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      else {
+        const entry = jobs.find((j) => path.includes(j.id));
+        if (entry) data = path.endsWith("/results") ? reports[entry.id] : entry;
+      }
+      return new Response(JSON.stringify(data), {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/dashboard"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findAllByText("Web-only CSP");
+    expect(
+      screen
+        .getByRole("button", { name: "Web診断" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "ネットワーク診断" }));
+    expect(screen.queryAllByText("Web-only CSP")).toHaveLength(0);
+    await screen.findAllByText("Network-only TCP");
+    expect(
+      screen
+        .getByTestId("diagnosis-report")
+        .getAttribute("data-result-profile"),
+    ).toBe("network");
+    expect(document.querySelector('[data-history-id="web-job"]')).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "AWSホスト診断" }));
+    expect(screen.queryByTestId("diagnosis-report")).toBeNull();
+    await screen.findByText(/AWSホスト診断の履歴はまだありません/);
+    expect(
+      document.querySelector('[data-history-id="network-job"]'),
+    ).toBeNull();
+    client.clear();
+  },
+);

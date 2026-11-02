@@ -65,7 +65,7 @@ test("取得失敗の理由をAPIと画面に表示する", async ({ page }) => 
         response.request().method() === "POST" &&
         response.url().endsWith("/v1/scans"),
     ),
-    page.getByRole("button", { name: "診断を開始 →" }).click(),
+    page.getByRole("button", { name: "Web診断を開始 →" }).click(),
   ]);
   expect(response.status()).toBe(202);
   const job = await response.json();

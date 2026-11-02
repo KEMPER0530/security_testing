@@ -51,6 +51,7 @@ class JobPage(BaseModel):
 
 
 class ResultResponse(BaseModel):
+    plan: dict[str, Any] | None = None
     ipa_checklist: list[dict[str, Any]] | None = None
     attack_analysis: dict[str, Any] | None = None
     evaluation_policy_version: str | None = None

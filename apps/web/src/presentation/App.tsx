@@ -12,6 +12,14 @@ import { ScanProgress } from "./ScanProgress";
 import { ScanFailure } from "./ScanFailure";
 import { Findings } from "./Findings";
 import { DiagnosticPlan } from "./DiagnosticPlan";
+import { DiagnosticTypes } from "./DiagnosticTypes";
+import {
+  diagnosticProfiles,
+  isProfile,
+  profileOfJob,
+  profileOfReport,
+  type ProfileId,
+} from "../domain/diagnostics";
 import { AiAnalysisPending } from "./AttackAnalysis";
 import "./style.css";
 import {
@@ -79,6 +87,11 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
   const [jobId, setJobId] = useState<string | null>(() =>
     stored(`security-testing:${principal}:job`),
   );
+  const [profile, setProfile] = useState<ProfileId>(() => {
+    const value = stored(`security-testing:${principal}:profile`);
+    return isProfile(value) ? value : "web";
+  });
+  const profileInfo = diagnosticProfiles[profile];
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
   const [busyLabel, setBusyLabel] = useState("");
@@ -124,6 +137,8 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
   const jobs: Item[] = scans.data?.items || [];
   const selected = rows.find((t) => t.sk === selectedId) || null;
   const id = selected?.sk?.replace("TARGET#", "") || "";
+  const activeSelectionRef = useRef({ profile, targetId: id });
+  activeSelectionRef.current = { profile, targetId: id };
   const jobQuery = useQuery({
     queryKey: [principal, "job", jobId],
     queryFn: async () =>
@@ -135,7 +150,13 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     enabled: Boolean(jobId),
     refetchInterval: (q) => (isActive(q.state.data?.state) ? 2000 : false),
   });
-  const job = jobQuery.data;
+  const candidateJob = jobQuery.data;
+  const job =
+    candidateJob &&
+    profileOfJob(candidateJob) === profile &&
+    candidateJob.target_id === id
+      ? candidateJob
+      : undefined;
   const reportQuery = useQuery({
     queryKey: [principal, "report", jobId],
     queryFn: async () =>
@@ -147,7 +168,17 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     enabled: Boolean(jobId && job?.state === "SUCCEEDED"),
     retry: 1,
   });
-  const report = reportQuery.data;
+  const candidateReport = reportQuery.data;
+  const reportMismatch = Boolean(
+    candidateReport &&
+    job &&
+    (candidateReport.job_id !== job.id ||
+      profileOfReport(candidateReport) !== profile),
+  );
+  const report = job && !reportMismatch ? candidateReport : undefined;
+  const history = jobs.filter(
+    (j) => profileOfJob(j) === profile && (!id || j.target_id === id),
+  );
   const activeForTarget = jobs.find(
     (j) => j.target_id === id && isActive(j.state),
   );
@@ -175,6 +206,9 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     remember(`security-testing:${principal}:job`, jobId);
   }, [principal, jobId]);
   useEffect(() => {
+    remember(`security-testing:${principal}:profile`, profile);
+  }, [principal, profile]);
+  useEffect(() => {
     if (!rows.length) return;
     if (!rows.some((t) => t.sk === selectedId)) {
       const latest = [...rows].sort((a, b) =>
@@ -188,13 +222,26 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     const active = jobs.find(
       (j) =>
         isActive(j.state) &&
+        profileOfJob(j) === profile &&
         (!selectedId || `TARGET#${j.target_id}` === selectedId),
     );
     if (active) {
       setJobId(active.id);
       setSelectedId(`TARGET#${active.target_id}`);
     }
-  }, [scans.data, jobId, selectedId]);
+  }, [scans.data, jobId, selectedId, profile]);
+  useEffect(() => {
+    if (!candidateJob || !id || !scans.data) return;
+    if (
+      candidateJob.target_id !== id ||
+      profileOfJob(candidateJob) !== profile
+    ) {
+      setJobId(
+        jobs.find((j) => j.target_id === id && profileOfJob(j) === profile)
+          ?.id || null,
+      );
+    }
+  }, [candidateJob, id, scans.data, profile]);
   useEffect(() => {
     if (
       jobQuery.error instanceof RequestFailure &&
@@ -207,9 +254,28 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     setProblem("");
     setNotice("");
     setJobId(
-      jobs.find((j) => j.target_id === target.sk.replace("TARGET#", ""))?.id ||
+      jobs.find(
+        (j) =>
+          j.target_id === target.sk.replace("TARGET#", "") &&
+          profileOfJob(j) === profile,
+      )?.id || null,
+    );
+  };
+  const chooseProfile = (value: ProfileId) => {
+    setProfile(value);
+    setProblem("");
+    setNotice("");
+    setJobId(
+      jobs.find((j) => j.target_id === id && profileOfJob(j) === value)?.id ||
         null,
     );
+  };
+  const chooseHistory = (entry: Item) => {
+    const value = profileOfJob(entry);
+    if (!value) return;
+    setProfile(value);
+    setSelectedId(`TARGET#${entry.target_id}`);
+    setJobId(entry.id);
   };
   const downloadPdf = (entry: Item) =>
     act("履歴のPDFを作成しています", async () => {
@@ -342,7 +408,9 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
         <p>
           {running
             ? "診断を実行しています。下の進行状況に結果が自動表示されます。"
-            : nextAction(Boolean(selected))}
+            : selected
+              ? `${profileInfo.title}を選択中です。検査内容を確認して開始してください。`
+              : nextAction(false)}
         </p>
       </div>
       {problem && (
@@ -397,7 +465,7 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
                 setJobId(null);
                 form.reset();
                 setNotice(
-                  "サイトを登録しました。「診断を開始」を押してください。",
+                  "サイトを登録しました。診断の種類を選んで開始してください。",
                 );
               }),
             )}
@@ -422,7 +490,7 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
             )}
           </form>
           <p className="hint">
-            URLを登録・選択し、「診断を開始」を押してください。事前設定は不要です。
+            対象を登録・選択し、下のカードから診断の種類を選んでください。
           </p>
           {targets.isPending ? (
             <div className="skeleton-list" aria-label="サイト一覧を読み込み中">
@@ -444,7 +512,7 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
                       <small>{t.url}</small>
                     </span>
                     <span className="target-meta">
-                      <span className="badge">公開ページ診断</span>
+                      <span className="badge">診断対象</span>
                     </span>
                   </button>
                   <button
@@ -471,34 +539,28 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
           <h2>診断を開始</h2>
         </div>
         <p className="muted">
-          公開ページのHTTPS、セキュリティヘッダー、Cookie属性などを確認します。診断後に問題の深刻度・対応優先度・改善方法を表示します。
+          調べたい内容に合わせて診断を選んでください。種類ごとに検査項目・結果・履歴が切り替わります。
         </p>
-        <div className="actions">
+        <DiagnosticTypes
+          selected={profile}
+          onSelect={chooseProfile}
+          historyCounts={Object.fromEntries(
+            Object.keys(diagnosticProfiles).map((kind) => [
+              kind,
+              jobs.filter((j) => j.target_id === id && profileOfJob(j) === kind)
+                .length,
+            ]),
+          )}
+        />
+        {history.length > 0 && (
           <button
-            disabled={!canStart}
-            onClick={() =>
-              act("診断を受け付けています", async () => {
-                const j = check(
-                  await client.POST("/v1/scans", {
-                    body: {
-                      target_id: id,
-                      profile: "web",
-                      region: "ap-northeast-1",
-                      authorized: false,
-                    },
-                    params: {
-                      header: { "idempotency-key": crypto.randomUUID() },
-                    },
-                  }),
-                );
-                setJobId(j.id);
-                jump("results");
-              })
-            }
+            type="button"
+            className="quiet"
+            onClick={() => jump("results")}
           >
-            {running ? "診断を実行中" : "診断を開始 →"}
+            {profileInfo.title}の結果・履歴を見る ↓
           </button>
-        </div>
+        )}
         {!canStart && (
           <p
             className="hint prerequisite"
@@ -507,20 +569,31 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
             {!selected
               ? "先に診断対象を選択してください。"
               : activeForTarget || running
-                ? "このサイトの診断はすでに進行中です。下の進行状況をご確認ください。"
+                ? `${diagnosticProfiles[profileOfJob(activeForTarget) || profile].title}が進行中です。完了後に次の診断を開始できます。`
                 : "操作の完了を待っています。"}
           </p>
         )}
         <DiagnosticPlan
-          key={id}
+          key={`${id}:${profile}`}
           client={client}
+          profile={profile}
+          principal={principal}
           targetId={id}
           targetUrl={selected?.url || ""}
           disabled={!canStart}
           onStarted={(j) => {
-            setJobId(j.id);
             void cache.invalidateQueries({ queryKey: [principal] });
-            jump("results");
+            if (
+              activeSelectionRef.current.profile === profileOfJob(j) &&
+              activeSelectionRef.current.targetId === j.target_id
+            ) {
+              setJobId(j.id);
+              jump("results");
+            } else {
+              setNotice(
+                `${diagnosticProfiles[profileOfJob(j) || "web"].title}を受け付けました。該当する種類の履歴で確認できます。`,
+              );
+            }
           }}
         />
       </section>
@@ -531,7 +604,7 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
       >
         <div className="section-heading">
           <span className="step">03</span>
-          <h2>診断結果</h2>
+          <h2>{profileInfo.title}の結果</h2>
           {job && (
             <span
               className={`badge ${job.state === "FAILED" ? "warning" : ""}`}
@@ -541,11 +614,13 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
           )}
         </div>
         <p className="muted">
-          診断は非同期で実行されます。完了すると、この画面に結果を自動表示します。
+          {profileInfo.result}
+          を表示します。現在選択している種類の診断結果だけを表示します。
         </p>
         {job && (
           <ScanProgress
             state={job.state}
+            profileLabel={profileInfo.title}
             url={job.url}
             createdAt={job.created_at}
             loadingResults={job.state === "SUCCEEDED" && reportQuery.isPending}
@@ -597,27 +672,30 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
             </button>
           </div>
         )}
-        {report && <Findings report={report} />}
+        {reportMismatch && (
+          <p role="alert" className="notice error">
+            診断種類または診断IDが一致しないため、この結果は表示できません。履歴から選び直してください。
+          </p>
+        )}
+        {report && <Findings report={report} expectedProfile={profile} />}
         {!jobId && (
           <p className="empty">
-            診断を開始すると、ここに進行状況と結果が表示されます。
+            {profileInfo.title}
+            の履歴はまだありません。この種類の診断を開始すると、進行状況と結果が表示されます。
           </p>
         )}
         <AiAnalysisPending />
-        {jobs.length > 0 && (
+        {history.length > 0 && (
           <details className="history-section" open>
             <summary>
-              診断履歴 <span>{jobs.length}件</span>
+              {profileInfo.title}の診断履歴 <span>{history.length}件</span>
             </summary>
             <div className="history">
-              {jobs.map((j) => (
+              {history.map((j) => (
                 <div className="history-row" key={j.id} data-history-id={j.id}>
                   <button
                     className={`history-item ${j.id === jobId ? "selected" : ""}`}
-                    onClick={() => {
-                      setJobId(j.id);
-                      setSelectedId(`TARGET#${j.target_id}`);
-                    }}
+                    onClick={() => chooseHistory(j)}
                   >
                     <span
                       className={`history-dot ${isActive(j.state) ? "running" : j.state === "FAILED" ? "failed" : ""}`}
@@ -625,17 +703,7 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
                     <span>
                       <b>{new URL(j.url).host}</b>
                       <small>
-                        {
-                          (
-                            {
-                              web: "Web公開設定",
-                              network: "ネットワーク",
-                              pentest: "限定Web検証",
-                              host: "AWSホスト",
-                              cloud: "AWSクラウド",
-                            } as Record<string, string>
-                          )[j.plan?.profile || "web"]
-                        }
+                        {diagnosticProfiles[profileOfJob(j) || "web"].title}
                       </small>
                       <small>
                         {new Date(j.created_at).toLocaleString("ja-JP")}

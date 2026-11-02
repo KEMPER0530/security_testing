@@ -160,6 +160,7 @@ class AwsAudit:
                     result = self.check(check, resource, account, plan["region"], call)
                     for row in result:
                         row["rule_id"] += f"_{index}"
+                        row.setdefault("details", {}).update(check=check, resource=resource)
                     rows.extend(result)
                 except (ClientError, BotoCoreError, Rejected) as exc:
                     code = (
@@ -173,6 +174,7 @@ class AwsAudit:
                             f"取得未完了（{code}）。権限・対象・収集設定・通信を確認してください。",
                             "読み取り権限と対象リソース、サービスの有効化を管理者が確認する",
                             reference=REFERENCE,
+                            details={"check": check, "resource": resource},
                         )
                     )
         return {
@@ -459,6 +461,11 @@ class AwsAudit:
                     "Inspectorの推奨修正と対象パッケージを管理者が確認し、修正版を適用する",
                     severity=SEVERITIES.get(item.get("severity"), "未評価"),
                     cvss=score,
+                    details={
+                        "vulnerability_id": vulnerability,
+                        "source": "Amazon Inspector",
+                        "updated_at": str(item.get("updatedAt", "記録なし")),
+                    },
                     explanation="AWSが収集したソフトウェアの既知の弱点です。使い方や公開範囲で実際の影響は変わります。",
                     criteria="指定EC2に対するACTIVE検出。CVSSは提供元のベクトルと数値が揃う場合だけ掲載します。",
                 )

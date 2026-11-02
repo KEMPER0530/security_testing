@@ -3,11 +3,13 @@ export function ScanProgress({
   state,
   url,
   createdAt,
+  profileLabel,
   loadingResults = false,
 }: {
   state: string;
   url: string;
   createdAt?: string;
+  profileLabel?: string;
   loadingResults?: boolean;
 }) {
   const active = isActive(state);
@@ -30,6 +32,7 @@ export function ScanProgress({
           <h3>
             {loadingResults ? "診断結果を取得しています" : stateLabel(state)}
           </h3>
+          {profileLabel && <p className="progress-profile">{profileLabel}</p>}
           <p className="progress-url">{url}</p>
         </div>
       </div>

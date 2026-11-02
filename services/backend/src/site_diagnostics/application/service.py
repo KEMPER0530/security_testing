@@ -346,6 +346,12 @@ class Service:
         if job["state"] != "SUCCEEDED":
             raise Conflict("診断結果はまだ確定していません")
         report = self.reports.get(owner, job["report_key"])
+        plan = job.get("plan") or plan_for()
+        if report.get("plan") and report["plan"] != plan:
+            raise Conflict("保存結果と診断の検査範囲が一致しません")
+        if report.get("coverage", {}).get("profile") not in (None, plan["profile"]):
+            raise Conflict("保存結果と診断の種類が一致しません")
+        report = {**report, "plan": plan, "coverage": {**report["coverage"], "profile": plan["profile"]}}
         return evaluate(report, self.evaluator, job["url"]) if self.evaluator else report
 
     def document(self, owner, job_id):

@@ -39,7 +39,7 @@ test("診断履歴からPDFを取得し、説明をタップで読み、作成�
     page.waitForResponse(
       (r) => r.request().method() === "POST" && r.url().endsWith("/v1/scans"),
     ),
-    page.getByRole("button", { name: "診断を開始 →" }).click(),
+    page.getByRole("button", { name: "Web診断を開始 →" }).click(),
   ]);
   expect(started.status(), await started.text()).toBe(202);
   const job = await started.json();

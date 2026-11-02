@@ -5,12 +5,12 @@ from site_diagnostics.domain.model import Rejected
 
 PROFILES: dict[str, dict] = {
     "web": {
-        "title": "Web公開設定",
+        "title": "Web診断",
         "checks": {"headers": "公開ページの応答・保護設定"},
         "scope": "単一URLの静的HTMLと応答設定",
     },
     "network": {
-        "title": "ネットワーク（限定）",
+        "title": "ネットワーク診断",
         "checks": {
             "dns": "公開IPの名前解決",
             "ports": "選択したTCPポートの接続確認",
@@ -29,12 +29,12 @@ PROFILES: dict[str, dict] = {
         "scope": "単一URLに対する低負荷の限定検証。侵入・権限昇格・横展開の実証は含まない",
     },
     "host": {
-        "title": "AWSホスト",
+        "title": "AWSホスト診断",
         "checks": {"inventory": "SSMのOS・収集状態", "inspector": "Amazon Inspectorの既存検出結果"},
         "scope": "指定EC2の収集済みSSM/Inspector情報。新規のOSコマンド実行は含まない",
     },
     "cloud": {
-        "title": "AWSクラウド",
+        "title": "AWSクラウド診断",
         "checks": {
             "root_mfa": "ルート利用者の多要素認証",
             "s3": "指定S3の公開制御・暗号化",
@@ -131,6 +131,7 @@ def finding(
     criteria="",
     reference="https://owasp.org/www-project-web-security-testing-guide/",
     cvss=None,
+    details=None,
 ):
     return {
         "rule_id": code,
@@ -166,4 +167,5 @@ def finding(
         if cvss
         else "この観測だけでは具体的な悪用条件と影響を確定できないため、数値を割り当てません。",
         "reference": reference,
+        "details": details or {},
     }

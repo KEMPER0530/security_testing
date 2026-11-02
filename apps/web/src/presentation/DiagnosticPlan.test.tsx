@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import React from "react";
+import React, { useState } from "react";
+import type { ProfileId } from "../domain/diagnostics";
+import { DiagnosticTypes } from "./DiagnosticTypes";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -14,6 +16,11 @@ import { DiagnosticPlan } from "./DiagnosticPlan";
 
 const catalog = {
   profiles: {
+    web: {
+      title: "Web診断",
+      scope: "公開ページのみ",
+      checks: { headers: "公開設定" },
+    },
     network: {
       title: "ネットワーク（限定）",
       scope: "TCP接続確認のみ",
@@ -77,33 +84,46 @@ function setup() {
   });
   clients.push(client);
   const onStarted = vi.fn();
+  function Plan() {
+    const [profile, setProfile] = useState<ProfileId>("network");
+    return (
+      <>
+        <DiagnosticTypes selected={profile} onSelect={setProfile} />
+        <DiagnosticPlan
+          key={profile}
+          profile={profile}
+          principal="plan-test"
+          client={createApi("http://localhost:8000", "test-only-token")}
+          targetId="example-target"
+          targetUrl="https://example.com/"
+          disabled={false}
+          onStarted={onStarted}
+        />
+      </>
+    );
+  }
   render(
     <QueryClientProvider client={client}>
-      <DiagnosticPlan
-        client={createApi("http://localhost:8000", "test-only-token")}
-        targetId="example-target"
-        targetUrl="https://example.com/"
-        disabled={false}
-        onStarted={onStarted}
-      />
+      <Plan />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByText(/検査内容を選んで手動実行/));
   return { requests, onStarted };
 }
 it("開始操作まで検査せず、選択した範囲と実施許可をAPIへ送る", async () => {
   const { requests, onStarted } = setup();
-  await screen.findByLabelText("診断の種類");
-  const start = screen.getByRole("button", { name: "選択した検査を実行 →" });
+  await screen.findByLabelText("TCP接続");
+  const start = screen.getByRole("button", { name: /を開始 →/ });
   expect(start.hasAttribute("disabled")).toBe(true);
   expect(requests.every((r) => r.method === "GET")).toBe(true);
-  fireEvent.change(screen.getByLabelText("診断の種類"), {
-    target: { value: "pentest" },
-  });
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "ペネトレーション（限定検証）",
+    }),
+  );
   expect(screen.getByText(/本格的な侵入/)).toBeTruthy();
   fireEvent.click(screen.getByLabelText("TRACE応答"));
   fireEvent.click(screen.getByLabelText(/実施する権限・許可があります/));
-  fireEvent.click(start);
+  fireEvent.click(screen.getByRole("button", { name: /を開始 →/ }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledOnce());
   const request = requests.find(
     (r) => r.method === "POST" && r.url.endsWith("/scans"),
@@ -122,10 +142,8 @@ it("開始操作まで検査せず、選択した範囲と実施許可をAPIへ�
 });
 it("AWS接続を準備してロールを保存し、指定EC2だけの検査を開始する", async () => {
   const { requests, onStarted } = setup();
-  await screen.findByLabelText("診断の種類");
-  fireEvent.change(screen.getByLabelText("診断の種類"), {
-    target: { value: "host" },
-  });
+  await screen.findByLabelText("TCP接続");
+  fireEvent.click(screen.getByRole("button", { name: "AWSホスト診断" }));
   fireEvent.click(
     screen.getByRole("button", { name: "AWS接続を準備・設定を表示" }),
   );
@@ -143,7 +161,7 @@ it("AWS接続を準備してロールを保存し、指定EC2だけの検査を�
     target: { value: "i-0123456789abcdef0" },
   });
   fireEvent.click(screen.getByLabelText(/実施する権限・許可があります/));
-  fireEvent.click(screen.getByRole("button", { name: "選択した検査を実行 →" }));
+  fireEvent.click(screen.getByRole("button", { name: /を開始 →/ }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledOnce());
   const body = await requests
     .find((r) => r.url.endsWith("/scans"))!
