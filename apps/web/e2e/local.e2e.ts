@@ -65,7 +65,7 @@ test("ログインから事前設定なしの診断・結果まで", async ({ pa
     page.getByRole("heading", { name: "システム重要度を設定" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "診断を開始 →" }),
+    page.getByRole("button", { name: "Web診断を開始 →" }),
   ).toBeEnabled();
   const history = await apiGet("/v1/scans");
   if (history.items.length) await waitForCooldown(history.items[0].created_at);
@@ -73,7 +73,7 @@ test("ログインから事前設定なしの診断・結果まで", async ({ pa
     page.waitForResponse(
       (r) => r.request().method() === "POST" && r.url().endsWith("/v1/scans"),
     ),
-    page.getByRole("button", { name: "診断を開始 →" }).click(),
+    page.getByRole("button", { name: "Web診断を開始 →" }).click(),
   ]);
   expect(firstScan.status(), await firstScan.text()).toBe(202);
   const firstJob = await firstScan.json();
@@ -160,7 +160,7 @@ test("ログインから事前設定なしの診断・結果まで", async ({ pa
       page.waitForResponse(
         (r) => r.request().method() === "POST" && r.url().endsWith("/v1/scans"),
       ),
-      page.getByRole("button", { name: "診断を開始 →" }).click(),
+      page.getByRole("button", { name: "Web診断を開始 →" }).click(),
     ]);
     expect(secondScan.status(), await secondScan.text()).toBe(202);
     const secondJob = await secondScan.json();

@@ -43,16 +43,19 @@ class AdvancedRunner:
                 )
             if "ports" in plan["checks"]:
                 for port in plan["ports"]:
+                    connection_state = "unknown"
                     status, evidence = "確認不能", "制限時間に達し未確認です。"
                     if time.monotonic() < deadline:
                         try:
                             with socket.create_connection((addresses[0], port), timeout=1):
+                                connection_state = "open"
                                 status = "問題を検出せず" if port in (80, 443) else "確認不能"
                                 evidence = (
                                     "TCP接続に成功。公開意図とアクセス制御の妥当性は別途確認が必要です。"
                                 )
                         except OSError as exc:
                             if exc.errno == errno.ECONNREFUSED:
+                                connection_state = "refused"
                                 status, evidence = (
                                     "問題を検出せず",
                                     "今回の接続は拒否されました。別経路や他ポートは未確認です。",
@@ -67,6 +70,7 @@ class AdvancedRunner:
                             evidence,
                             "不要なサービス公開を閉じ、必要な接続元だけ許可する",
                             explanation="サーバーへの通信の入口です。つながることだけでは侵入できるとは分からないため、公開が必要か管理者が確認します。",
+                            details={"port": port, "connection": connection_state},
                             criteria="指定した1ホスト・1ポートへのTCP接続のみ。サービス製品・既知脆弱性は未検査です。",
                         )
                     )
@@ -180,6 +184,7 @@ class AdvancedRunner:
                     "確認不能",
                     f"HTTP {status}のため検証未完了です。",
                     "正常応答するURLで再確認する",
+                    details={"method": "GET", "http_status": status},
                 )
             bad = (
                 h.get("access-control-allow-origin") == ORIGIN
@@ -195,6 +200,7 @@ class AdvancedRunner:
                 "許可するOriginを固定し、資格情報が必要な範囲だけ許可する",
                 severity="中",
                 explanation="別のサイトに、このサイトの応答を読ませる許可の設定です。",
+                details={"method": "GET", "http_status": status},
                 criteria="検証用Originの反映とAllow-Credentials:trueの組合せだけを確認します。認証情報は送りません。",
             )
         if check == "methods":
@@ -210,6 +216,7 @@ class AdvancedRunner:
                 f"HTTP {status}。Allow表示：{', '.join(methods) or '記載なし'}。書き込み操作は実行していません。",
                 "許可表示と実際の認証・認可設定を管理者が確認する",
                 explanation="サイトにどの種類の操作を受け付けるか尋ねます。表示された操作が、実際に認証なしで使えるという意味ではありません。",
+                details={"method": "OPTIONS", "http_status": status, "allowed_methods": methods},
                 criteria="OPTIONS応答だけを収集します。Allowの表示だけで書き込み可能とは判断しません。",
             )
         status, _, body = self.probe(scope, "TRACE", {"X-Security-Testing-Probe": MARKER})
@@ -225,5 +232,6 @@ class AdvancedRunner:
             "不要なTRACEを無効にする",
             severity="低",
             explanation="送った通信の内容をそのまま返すデバッグ用の機能です。不要なら無効にし、情報を余分に返さないようにします。",
+            details={"method": "TRACE", "http_status": status, "reflected": enabled},
             criteria="秘密情報を含まない検証用ヘッダーの反射を確認します。Cookie等は送信・保存しません。",
         )

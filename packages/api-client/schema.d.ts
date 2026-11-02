@@ -355,6 +355,10 @@ export interface components {
         };
         /** ResultResponse */
         ResultResponse: {
+            /** Plan */
+            plan?: {
+                [key: string]: unknown;
+            } | null;
             /** Ipa Checklist */
             ipa_checklist?: {
                 [key: string]: unknown;

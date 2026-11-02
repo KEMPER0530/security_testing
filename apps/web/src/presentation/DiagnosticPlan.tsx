@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createApi } from "@security-testing/api-client";
 import { InfoTooltip } from "./InfoTooltip";
+import { diagnosticProfiles, type ProfileId } from "../domain/diagnostics";
 
 type Item = Record<string, any>;
 type Client = ReturnType<typeof createApi>;
@@ -28,21 +29,24 @@ export function DiagnosticPlan({
   targetUrl,
   disabled,
   onStarted,
+  profile,
+  principal,
 }: {
   client: Client;
   targetId: string;
   targetUrl: string;
   disabled: boolean;
   onStarted: (job: Item) => void;
+  profile: ProfileId;
+  principal: string;
 }) {
-  const [profile, setProfile] = useState("network");
-  const [checks, setChecks] = useState<string[]>(["dns", "ports", "tls"]);
+  const [checks, setChecks] = useState<string[] | null>(null);
   const [ports, setPorts] = useState<number[]>([443]);
   const [resources, setResources] = useState<Record<string, string>>({});
   const [region, setRegion] = useState("ap-northeast-1");
   const [authorized, setAuthorized] = useState(false);
-  const [connection, setConnection] = useState<Item | null>(null);
-  const [arn, setArn] = useState("");
+  const [connectionOverride, setConnection] = useState<Item | null>(null);
+  const [arn, setArn] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -53,15 +57,37 @@ export function DiagnosticPlan({
   });
   const profiles = catalog.data?.profiles || {};
   const current = profiles[profile];
+  const selectedChecks =
+    checks ??
+    Object.keys(
+      current?.checks ||
+        (profile === "web" ? { headers: "公開ページの応答・保護設定" } : {}),
+    );
+  const info = diagnosticProfiles[profile];
   const aws = profile === "host" || profile === "cloud";
+  const savedConnection = useQuery({
+    queryKey: [principal, "aws-connection", targetId],
+    queryFn: async () => {
+      const response = await client.GET(
+        "/v1/targets/{target_id}/aws-connection",
+        { params: { path: { target_id: targetId } } },
+      );
+      if (response.response.status === 404) return null;
+      return result(response);
+    },
+    enabled: aws && Boolean(targetId),
+    staleTime: 0,
+  });
+  const connection = connectionOverride ?? savedConnection.data ?? null;
+  const roleArn = arn ?? connection?.role_arn ?? "";
   const kinds =
     profile === "host"
       ? ["instances"]
       : profile === "cloud"
         ? ([
-            checks.includes("s3") && "buckets",
-            checks.includes("security_groups") && "security_groups",
-            checks.includes("cloudtrail") && "trails",
+            selectedChecks.includes("s3") && "buckets",
+            selectedChecks.includes("security_groups") && "security_groups",
+            selectedChecks.includes("cloudtrail") && "trails",
           ].filter(Boolean) as string[])
         : [];
   const blocked = disabled || Boolean(busy);
@@ -78,29 +104,18 @@ export function DiagnosticPlan({
       setBusy("");
     }
   }
-  function select(value: string) {
-    setProfile(value);
-    setChecks(Object.keys(profiles[value]?.checks || {}));
-    setAuthorized(false);
-    setError("");
-    setNotice("");
-  }
   function toggle(value: string) {
     setChecks(
-      checks.includes(value)
-        ? checks.filter((v) => v !== value)
-        : [...checks, value],
+      selectedChecks.includes(value)
+        ? selectedChecks.filter((v) => v !== value)
+        : [...selectedChecks, value],
     );
     setAuthorized(false);
   }
   return (
-    <details className="advanced-diagnostics">
-      <summary>
-        検査内容を選んで手動実行（ネットワーク・AWS・限定Web検証）
-      </summary>
-      <p className="muted">
-        対象と検査内容を指定して開始します。AWS診断には、設定を読むための接続準備が必要です。
-      </p>
+    <div className="diagnostic-configuration" data-profile={profile}>
+      <h3>{info.title}の検査内容</h3>
+      <p className="muted">{info.scope}</p>
       {catalog.isPending && <p role="status">検査一覧を読み込んでいます…</p>}
       {catalog.error && (
         <p role="alert">
@@ -110,7 +125,7 @@ export function DiagnosticPlan({
           </button>
         </p>
       )}
-      {current && (
+      {(current || profile === "web") && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -119,11 +134,10 @@ export function DiagnosticPlan({
                 await client.POST("/v1/scans", {
                   body: {
                     target_id: targetId,
-                    profile: profile as
-                      "network" | "pentest" | "host" | "cloud",
-                    checks,
+                    profile,
+                    checks: selectedChecks,
                     ports:
-                      profile === "network" && checks.includes("ports")
+                      profile === "network" && selectedChecks.includes("ports")
                         ? ports
                         : [],
                     resources: Object.fromEntries(
@@ -133,7 +147,7 @@ export function DiagnosticPlan({
                       ]),
                     ),
                     region,
-                    authorized,
+                    authorized: profile === "web" ? false : authorized,
                   },
                   params: {
                     header: { "idempotency-key": crypto.randomUUID() },
@@ -145,22 +159,7 @@ export function DiagnosticPlan({
             });
           }}
         >
-          <label htmlFor="diagnostic-profile">診断の種類</label>
-          <select
-            id="diagnostic-profile"
-            value={profile}
-            disabled={blocked}
-            onChange={(e) => select(e.target.value)}
-          >
-            {Object.entries(profiles)
-              .filter(([key]) => key !== "web")
-              .map(([key, value]) => (
-                <option key={key} value={key}>
-                  {(value as Item).title}
-                </option>
-              ))}
-          </select>
-          <p className="scope-note">{current.scope}</p>
+          <p className="scope-note">{current?.scope || info.scope}</p>
           {profile === "pentest" && (
             <p className="notice">
               この機能は公開ページへの限定検証です。本格的な侵入、権限の奪取、別システムへの横展開は実施しません。ログインや入力処理を含む包括的なペネトレーションテストは専門家の検証が必要です。
@@ -174,11 +173,13 @@ export function DiagnosticPlan({
           <fieldset disabled={blocked}>
             <legend>実施する検査</legend>
             <div className="check-options">
-              {Object.entries(current.checks).map(([key, title]) => (
+              {Object.entries(
+                current?.checks || { headers: "公開ページの応答・保護設定" },
+              ).map(([key, title]) => (
                 <label className="check-option" key={key}>
                   <input
                     type="checkbox"
-                    checked={checks.includes(key)}
+                    checked={selectedChecks.includes(key)}
                     onChange={() => toggle(key)}
                   />
                   {String(title)}
@@ -186,7 +187,7 @@ export function DiagnosticPlan({
               ))}
             </div>
           </fieldset>
-          {profile === "network" && checks.includes("ports") && (
+          {profile === "network" && selectedChecks.includes("ports") && (
             <fieldset disabled={blocked}>
               <legend>
                 TCPポート（最大8個）
@@ -216,6 +217,11 @@ export function DiagnosticPlan({
                 ))}
               </div>
             </fieldset>
+          )}
+          {savedConnection.error && (
+            <p role="alert">
+              AWS接続設定の取得に失敗しました。{savedConnection.error.message}
+            </p>
           )}
           {aws && (
             <div className="aws-setup">
@@ -280,7 +286,7 @@ export function DiagnosticPlan({
                   </label>
                   <input
                     id="audit-role-arn"
-                    value={arn}
+                    value={roleArn}
                     onChange={(e) => setArn(e.target.value)}
                     disabled={blocked}
                     placeholder="arn:aws:iam::123456789012:role/security-testing-audit-…"
@@ -288,7 +294,7 @@ export function DiagnosticPlan({
                   />
                   <button
                     type="button"
-                    disabled={blocked || !arn}
+                    disabled={blocked || !roleArn}
                     onClick={() =>
                       void action("接続設定を保存しています", async () => {
                         const data = result(
@@ -296,7 +302,7 @@ export function DiagnosticPlan({
                             "/v1/targets/{target_id}/aws-connection",
                             {
                               params: { path: { target_id: targetId } },
-                              body: { role_arn: arn },
+                              body: { role_arn: roleArn },
                             },
                           ),
                         );
@@ -348,38 +354,47 @@ export function DiagnosticPlan({
               {targetUrl || "診断対象を選択してください"}
             </p>
             <p>
-              {current.title}：
-              {checks.map((c) => current.checks[c]).join("、") || "検査未選択"}
+              {info.title}：
+              {selectedChecks
+                .map((c) => current?.checks?.[c] || c)
+                .join("、") || "検査未選択"}
             </p>
-            {profile === "network" && checks.includes("ports") && (
+            {profile === "network" && selectedChecks.includes("ports") && (
               <p>TCP：{ports.join(", ") || "未選択"}</p>
+            )}
+            {savedConnection.error && (
+              <p role="alert">
+                AWS接続設定の取得に失敗しました。{savedConnection.error.message}
+              </p>
             )}
             {aws && (
               <p>リージョン：{region}。指定したリソースだけを読み取ります。</p>
             )}
-            <label className="check-option">
-              <input
-                type="checkbox"
-                checked={authorized}
-                disabled={blocked}
-                onChange={(e) => setAuthorized(e.target.checked)}
-              />
-              この対象と選択した検査範囲について、実施する権限・許可があります
-            </label>
+            {profile !== "web" && (
+              <label className="check-option">
+                <input
+                  type="checkbox"
+                  checked={authorized}
+                  disabled={blocked}
+                  onChange={(e) => setAuthorized(e.target.checked)}
+                />
+                この対象と選択した検査範囲について、実施する権限・許可があります
+              </label>
+            )}
           </div>
           <button
             disabled={
               blocked ||
               !targetId ||
-              !authorized ||
-              !checks.length ||
+              (profile !== "web" && !authorized) ||
+              !selectedChecks.length ||
               (profile === "network" &&
-                checks.includes("ports") &&
+                selectedChecks.includes("ports") &&
                 !ports.length) ||
               (aws && !connection?.role_arn)
             }
           >
-            選択した検査を実行 →
+            {info.title}を開始 →
           </button>
         </form>
       )}
@@ -399,6 +414,6 @@ export function DiagnosticPlan({
           {notice}
         </p>
       )}
-    </details>
+    </div>
   );
 }

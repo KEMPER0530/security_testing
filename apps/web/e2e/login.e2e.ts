@@ -100,7 +100,7 @@ test("CognitoへSRP接続し、存在しないテスト用ユーザーはサイ�
     true,
   );
   await expect(page.getByLabel("パスワード", { exact: true })).toHaveValue("");
-  await expect(page.getByRole("button", { name: "診断を開始 →" })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("button", { name: "Web診断を開始 →" }),
+  ).toHaveCount(0);
 });

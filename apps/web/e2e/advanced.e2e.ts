@@ -37,13 +37,13 @@ test("手動ネットワーク検査、履歴PDF、AWS接続準備とモバイ�
   const selected = page.locator(`[data-target-id="${target.sk}"]`);
   await expect(selected).toHaveAttribute("aria-pressed", "true");
   await page
-    .getByText("検査内容を選んで手動実行（ネットワーク・AWS・限定Web検証）")
+    .getByRole("button", { name: "ネットワーク診断", exact: true })
     .click();
-  await expect(page.getByLabel("診断の種類")).toBeVisible();
+  await expect(page.getByRole("group", { name: "診断の種類" })).toBeVisible();
   await page.getByLabel("Web通信とTLS証明書").uncheck();
   await page.getByLabel("443", { exact: true }).uncheck();
   await page.getByLabel("80", { exact: true }).check();
-  const start = page.getByRole("button", { name: "選択した検査を実行 →" });
+  const start = page.getByRole("button", { name: /を開始 →/ });
   await expect(start).toBeDisabled();
   await page.getByLabel(/実施する権限・許可があります/).check();
   const [started] = await Promise.all([
@@ -56,9 +56,21 @@ test("手動ネットワーク検査、履歴PDF、AWS接続準備とモバイ�
   const job = await started.json();
   expect(job.plan.profile).toBe("network");
   expect(job.plan.ports).toEqual([80]);
+  const resultResponse = await page.waitForResponse(
+    (r) => r.url().endsWith(`/v1/scans/${job.id}/results`),
+    { timeout: 150000 },
+  );
+  const networkReport = await resultResponse.json();
+  expect(networkReport.plan.profile).toBe("network");
+  expect(
+    networkReport.findings.find((f: any) => f.rule_id === "PORT_80").details,
+  ).toEqual({ port: 80, connection: "open" });
   await expect(page.getByTestId("diagnosis-report")).toBeVisible({
     timeout: 150000,
   });
+  await expect(
+    page.getByRole("heading", { name: /TCPポートの接続結果/ }),
+  ).toBeVisible();
   nextHostRun = Date.now() + 125_000;
   const row = page.locator(`[data-history-id="${job.id}"]`);
   const [response, download] = await Promise.all([
@@ -73,7 +85,9 @@ test("手動ネットワーク検査、履歴PDF、AWS接続準備とモバイ�
   await download.saveAs(file);
   expect((await readFile(file)).subarray(0, 5).toString()).toBe("%PDF-");
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByLabel("診断の種類").selectOption("host");
+  await page
+    .getByRole("button", { name: "AWSホスト診断", exact: true })
+    .click();
   await page.getByRole("button", { name: "AWS接続を準備・設定を表示" }).click();
   await expect(page.getByLabel("読み取り専用ロールのARN")).toBeVisible({
     timeout: 60000,
@@ -118,7 +132,9 @@ test("手動ネットワーク検査、履歴PDF、AWS接続準備とモバイ�
     path: resolve("../../.build/advanced-mobile-aws.png"),
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.locator(".advanced-diagnostics").scrollIntoViewIfNeeded();
+  await page
+    .getByRole("heading", { name: "診断を開始", exact: true })
+    .scrollIntoViewIfNeeded();
   await page.screenshot({ path: resolve("../../.build/advanced-desktop.png") });
   page.on("dialog", (d) => d.accept());
   const [removed] = await Promise.all([
@@ -164,10 +180,12 @@ test("限定Web検証をボタンで開始しCORS・OPTIONS・TRACEの実応答�
   const selected = page.locator(`[data-target-id="${target.sk}"]`);
   await expect(selected).toHaveAttribute("aria-pressed", "true");
   await page
-    .getByText("検査内容を選んで手動実行（ネットワーク・AWS・限定Web検証）")
+    .getByRole("button", { name: "ネットワーク診断", exact: true })
     .click();
   test.setTimeout(360000);
-  await page.getByLabel("診断の種類").selectOption("pentest");
+  await page
+    .getByRole("button", { name: "ペネトレーション（限定検証）", exact: true })
+    .click();
   while (Date.now() < nextHostRun) {
     await page.waitForTimeout(Math.min(60_000, nextHostRun - Date.now()));
   }
@@ -176,7 +194,7 @@ test("限定Web検証をボタンで開始しCORS・OPTIONS・TRACEの実応答�
     page.waitForResponse(
       (r) => r.request().method() === "POST" && r.url().endsWith("/v1/scans"),
     ),
-    page.getByRole("button", { name: "選択した検査を実行 →" }).click(),
+    page.getByRole("button", { name: /を開始 →/ }).click(),
   ]);
   expect(started.status(), await started.text()).toBe(202);
   const job = await started.json();
@@ -199,6 +217,23 @@ test("限定Web検証をボタンで開始しCORS・OPTIONS・TRACEの実応答�
   expect(report.findings.some((f: any) => f.rule_id === "CSP")).toBe(true);
   await expect(page.getByTestId("diagnosis-report")).toBeVisible();
   await page.getByText("IPAの対策項目と確認できた範囲").click();
+  await expect(
+    page.getByRole("heading", { name: /HTTPの限定検証/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "AWSクラウド診断", exact: true })
+    .click();
+  await expect(page.getByTestId("diagnosis-report")).toHaveCount(0);
+  await expect(
+    page.getByText(/AWSクラウド診断の履歴はまだありません/),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "ペネトレーション（限定検証）", exact: true })
+    .click();
+  await expect(page.getByTestId("diagnosis-report")).toHaveAttribute(
+    "data-result-profile",
+    "pentest",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(

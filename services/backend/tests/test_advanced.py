@@ -122,9 +122,13 @@ def test_queue_pins_plan_and_connection_and_preserves_partial_unknown(ready):
     assert result["findings"][0]["status"] == "確認不能"
     assert all(i["coverage"] == "未実施" for i in result["ipa_checklist"])
     assert result["summary"]["check_status_counts"] == {"確認不能": 1}
-    assert "要確認" in "\n".join(
+    text = "\n".join(
         p.extract_text() for p in PdfReader(BytesIO(service.document("alice", job["id"]))).pages
     )
+    assert "要確認" in text
+    assert "AWSホスト診断" in text
+    assert "IPA対策との対応関係" not in text
+    assert INSTANCE in text
 
 
 @pytest.mark.parametrize("remove", ["target", "history", "cancel"])
@@ -331,6 +335,7 @@ def test_inspector_preserves_provider_cvss_and_records_truncation(ready):
     )
     rows = audit.check("inspector", INSTANCE, ACCOUNT, "ap-northeast-1", calls)
     assert rows[0]["cvss"]["score"] == 9.8
+    assert rows[0]["details"]["vulnerability_id"] == "CVE-2025-0001"
     assert rows[1]["status"] == "確認不能"
 
     class Runner:
@@ -409,6 +414,7 @@ def test_open_management_port_is_not_declared_exploitable(monkeypatch):
     )
     assert report["findings"][0]["status"] == "確認不能"
     assert "公開意図" in report["findings"][0]["evidence"]
+    assert report["findings"][0]["details"] == {"port": 22, "connection": "open"}
 
 
 def test_limited_web_tests_do_not_send_credentials_or_write_methods():
@@ -523,3 +529,27 @@ def test_inspector_missing_identity_is_incomplete():
     rows = AwsAudit(WORKER).check("inspector", INSTANCE, ACCOUNT, "ap-northeast-1", calls)
     assert len(rows) == 1 and rows[0]["status"] == "確認不能"
     assert "識別子の欠落=True" in rows[0]["evidence"]
+
+
+def test_results_expose_immutable_kind_and_scope_and_reject_mismatched_report(ready, monkeypatch):
+    service, target, _, _ = ready
+    service.diagnostics = FakeDiagnostics()
+    job = service.enqueue(
+        "alice", target, "network-result-scope", dict(profile="network", checks=["dns"], authorized=True)
+    )
+    service.execute("alice", job["id"])
+    monkeypatch.setattr(api, "service", lambda: service)
+    api.app.dependency_overrides[api.user] = lambda: "alice"
+    try:
+        response = TestClient(api.app).get(f"/v1/scans/{job['id']}/results")
+        assert response.status_code == 200
+        assert response.json()["plan"]["profile"] == "network"
+        assert response.json()["plan"]["checks"] == ["dns"]
+        assert "aws_connection" not in response.json()
+        key = service.visible_job("alice", job["id"])["report_key"]
+        bad = service.reports.get("alice", key)
+        bad["coverage"]["profile"] = "web"
+        service.reports.put("alice", key, bad)
+        assert TestClient(api.app).get(f"/v1/scans/{job['id']}/results").status_code == 409
+    finally:
+        api.app.dependency_overrides.clear()

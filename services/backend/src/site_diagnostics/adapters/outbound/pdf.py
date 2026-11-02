@@ -20,6 +20,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 from site_diagnostics.domain.checks import CVSS_NOTICE
+from site_diagnostics.domain.plans import PROFILES
 from site_diagnostics.domain.ipa import IPA_EDITION, IPA_NOTICE, IPA_SOURCE, ipa_checklist
 
 GREEN = colors.HexColor("#123f39")
@@ -141,12 +142,30 @@ class ReportPdf:
         def label_rows(rows):
             return table(rows, [84, width - 84], False, extra=[("BACKGROUND", (0, 0), (0, -1), PALE)])
 
+        plan = job.get("plan") or (report or {}).get("plan") or {}
+        profile = plan.get("profile") or (report or {}).get("coverage", {}).get("profile", "web")
+        profile_info = PROFILES.get(profile, {})
+        show_ipa = profile in ("web", "pentest")
+        detail_section = 4 if show_ipa else 3
         states = {"SUCCEEDED": "診断完了", "FAILED": "診断失敗", "CANCELLED": "キャンセル"}
         story = [p("SECURITY TESTING / DIAGNOSTIC REPORT", "tiny"), p("診断レポート", "title")]
         story.append(
             label_rows(
                 [
-                    ("対象", job["url"]),
+                    ("診断の種類", profile_info.get("title", "記録なし")),
+                    ("登録URL" if profile in ("host", "cloud") else "対象URL", job["url"]),
+                    (
+                        "実行した検査",
+                        "、".join(
+                            profile_info.get("checks", {}).get(k, k)
+                            for k in (
+                                plan.get("checks")
+                                or (report or {}).get("coverage", {}).get("checks")
+                                or (["headers"] if profile == "web" else [])
+                            )
+                        )
+                        or "記録なし",
+                    ),
                     ("実行結果", states[job["state"]] + "（保存結果から出力・再診断なし）"),
                     (
                         "受付 / 終了",
@@ -217,36 +236,56 @@ class ReportPdf:
                     else "CVSSは具体的な既知脆弱性の数値を提供元評価として掲載します。設定観測だけで悪用条件が分からない項目は適用外、確認できなかった項目は未実施と区別します。",
                     "small",
                 ),
-                PageBreak(),
-                p("3. IPA対策との対応関係", "title"),
-                p(IPA_EDITION, "small"),
-                p(IPA_NOTICE, "small"),
-                p("AWSホスト・クラウド診断では、このWeb対策表の項目は未実施です。", "small")
-                if report.get("coverage", {}).get("profile") in ("host", "cloud")
-                else Spacer(1, 0),
             ]
-            rows = [["IPA節 / 頁", "確認すること（独自の要約）", "今回の確認", "追加で必要な確認"]]
-            for item in report.get("ipa_checklist") or ipa_checklist(findings):
-                rows.append(
-                    [
-                        f"{item['section']} / p.{item['page']}",
-                        item["title"],
-                        item["coverage"]
-                        + (f"\n関連指摘 {item['detected_count']}件" if item["observed_checks"] else ""),
-                        item["additional_verification"],
-                    ]
-                )
-            story += [
-                table(rows, [57, 148, 98, width - 303]),
-                Spacer(1, 6),
-                p(
-                    "章・ページはIPA資料の冊子記載ページです。関連設定が観測できても、各章の根本的な対策全体は未検証です。",
-                    "tiny",
-                ),
-                p("参照元：" + IPA_SOURCE, "tiny"),
-                PageBreak(),
-                p("4. 項目別の分析", "title"),
-            ]
+            if profile == "network" and plan.get("ports"):
+                story.append(label_rows([("対象TCPポート", ", ".join(str(port) for port in plan["ports"]))]))
+            if profile in ("host", "cloud"):
+                scope_rows = [
+                    ("リージョン", plan.get("region") or report["coverage"].get("region", "記録なし"))
+                ]
+                for kind, values in (
+                    plan.get("resources") or report["coverage"].get("resources", {})
+                ).items():
+                    scope_rows.append(
+                        (
+                            {
+                                "instances": "対象EC2",
+                                "buckets": "対象S3",
+                                "security_groups": "対象SG",
+                                "trails": "対象CloudTrail",
+                            }.get(kind, kind),
+                            "\n".join(values),
+                        )
+                    )
+                story.append(label_rows(scope_rows))
+            if show_ipa:
+                story += [
+                    PageBreak(),
+                    p("3. IPA対策との対応関係", "title"),
+                    p(IPA_EDITION, "small"),
+                    p(IPA_NOTICE, "small"),
+                ]
+                rows = [["IPA節 / 頁", "確認すること（独自の要約）", "今回の確認", "追加で必要な確認"]]
+                for item in report.get("ipa_checklist") or ipa_checklist(findings):
+                    rows.append(
+                        [
+                            f"{item['section']} / p.{item['page']}",
+                            item["title"],
+                            item["coverage"]
+                            + (f"\n関連指摘 {item['detected_count']}件" if item["observed_checks"] else ""),
+                            item["additional_verification"],
+                        ]
+                    )
+                story += [
+                    table(rows, [57, 148, 98, width - 303]),
+                    Spacer(1, 6),
+                    p(
+                        "章・ページはIPA資料の冊子記載ページです。関連設定が観測できても、各章の根本的な対策全体は未検証です。",
+                        "tiny",
+                    ),
+                    p("参照元：" + IPA_SOURCE, "tiny"),
+                ]
+            story += [PageBreak(), p(f"{detail_section}. 項目別の分析", "title")]
             for f in findings:
                 cvss = f.get("cvss")
                 rows = [
@@ -263,6 +302,24 @@ class ReportPdf:
                     ["改善方法", f.get("fix", "追加の調査が必要です。")],
                     ["CVSS", cvss_label(f) + "\n" + f.get("cvss_reason", "")],
                 ]
+                details = f.get("details") or {}
+                observation = []
+                if details.get("resource"):
+                    observation.append("対象：" + str(details["resource"]))
+                if details.get("port"):
+                    observation.append("TCP " + str(details["port"]))
+                if details.get("connection"):
+                    observation.append(
+                        {"open": "TCP接続可", "refused": "接続拒否", "unknown": "確認不能"}.get(
+                            details["connection"], "確認不能"
+                        )
+                    )
+                if details.get("method"):
+                    observation.append(str(details["method"]))
+                if details.get("http_status"):
+                    observation.append("HTTP " + str(details["http_status"]))
+                if observation:
+                    rows.insert(2, ["検査固有の観測", " / ".join(observation)])
                 if cvss:
                     rows.extend(
                         [
@@ -296,7 +353,11 @@ class ReportPdf:
                 story.append(Spacer(1, 10))
             analysis = report.get("attack_analysis")
             if analysis:
-                story += [PageBreak(), p("5. どこに注意が必要？", "title"), p(analysis["notice"], "small")]
+                story += [
+                    PageBreak(),
+                    p(f"{detail_section + 1}. どこに注意が必要？", "title"),
+                    p(analysis["notice"], "small"),
+                ]
                 rows = [["種類 / 注意箇所", "起こり得る被害と必要な追加条件", "まず取り組む対策"]]
                 for item in analysis["items"]:
                     rows.append(

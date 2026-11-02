@@ -1251,6 +1251,18 @@
       },
       "ResultResponse": {
         "properties": {
+          "plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
           "ipa_checklist": {
             "anyOf": [
               {
