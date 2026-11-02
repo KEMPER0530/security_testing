@@ -225,7 +225,7 @@ test("限定Web検証をボタンで開始しCORS・OPTIONS・TRACEの実応答�
     .click();
   await expect(page.getByTestId("diagnosis-report")).toHaveCount(0);
   await expect(
-    page.getByText(/AWSクラウド診断の履歴はまだありません/),
+    page.getByText(/AWSクラウド診断の結果が選択中の対象にはありません/),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "ペネトレーション（限定検証）", exact: true })

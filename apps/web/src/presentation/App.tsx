@@ -92,6 +92,7 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
     return isProfile(value) ? value : "web";
   });
   const profileInfo = diagnosticProfiles[profile];
+  const [historyScope, setHistoryScope] = useState<"all" | "selected">("all");
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
   const [busyLabel, setBusyLabel] = useState("");
@@ -176,8 +177,10 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
       profileOfReport(candidateReport) !== profile),
   );
   const report = job && !reportMismatch ? candidateReport : undefined;
-  const history = jobs.filter(
-    (j) => profileOfJob(j) === profile && (!id || j.target_id === id),
+  const showingAllHistory = historyScope === "all" || !id;
+  const profileHistory = jobs.filter((j) => profileOfJob(j) === profile);
+  const history = profileHistory.filter(
+    (j) => showingAllHistory || j.target_id === id,
   );
   const activeForTarget = jobs.find(
     (j) => j.target_id === id && isActive(j.state),
@@ -552,13 +555,13 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
             ]),
           )}
         />
-        {history.length > 0 && (
+        {profileHistory.length > 0 && (
           <button
             type="button"
             className="quiet"
-            onClick={() => jump("results")}
+            onClick={() => jump("history")}
           >
-            {profileInfo.title}の結果・履歴を見る ↓
+            {profileInfo.title}の診断履歴を見る ↓
           </button>
         )}
         {!canStart && (
@@ -681,63 +684,95 @@ function Workspace({ token, principal }: { token: string; principal: string }) {
         {!jobId && (
           <p className="empty">
             {profileInfo.title}
-            の履歴はまだありません。この種類の診断を開始すると、進行状況と結果が表示されます。
+            の結果が選択中の対象にはありません。
+            {profileHistory.length > 0
+              ? "下の履歴一覧から他の対象の結果を選べます。"
+              : "この種類の診断を開始すると、進行状況と結果が表示されます。"}
           </p>
         )}
         <AiAnalysisPending />
-        {history.length > 0 && (
-          <details className="history-section" open>
-            <summary>
-              {profileInfo.title}の診断履歴 <span>{history.length}件</span>
-            </summary>
-            <div className="history">
-              {history.map((j) => (
-                <div className="history-row" key={j.id} data-history-id={j.id}>
+        <section
+          className="history-section"
+          id="history"
+          aria-label={`${profileInfo.title}の診断履歴`}
+        >
+          <div className="history-heading">
+            <h3>{profileInfo.title}の診断履歴</h3>
+            <span className="badge">{history.length}件</span>
+          </div>
+          <label className="history-filter" htmlFor="history-scope">
+            履歴の表示範囲
+            <select
+              id="history-scope"
+              value={showingAllHistory ? "all" : "selected"}
+              onChange={(e) =>
+                setHistoryScope(e.target.value as "all" | "selected")
+              }
+            >
+              <option value="all">すべての対象</option>
+              <option value="selected" disabled={!id}>
+                選択中の対象
+              </option>
+            </select>
+          </label>
+          <p className="muted">
+            {showingAllHistory ? "すべての対象" : "選択中の対象"}の
+            {profileInfo.title}
+            を新しい順に表示しています。履歴を選ぶと、その対象と診断結果に切り替わります。
+          </p>
+          {scans.isPending && <p role="status">診断履歴を読み込んでいます…</p>}
+          {!scans.isPending && !scans.error && history.length === 0 && (
+            <p className="empty">
+              この表示範囲に{profileInfo.title}の診断履歴はありません。
+            </p>
+          )}
+          <div className="history">
+            {history.map((j) => (
+              <div className="history-row" key={j.id} data-history-id={j.id}>
+                <button
+                  className={`history-item ${j.id === jobId ? "selected" : ""}`}
+                  onClick={() => chooseHistory(j)}
+                >
+                  <span
+                    className={`history-dot ${isActive(j.state) ? "running" : j.state === "FAILED" ? "failed" : ""}`}
+                  />
+                  <span>
+                    <b>{new URL(j.url).host}</b>
+                    <small>
+                      {diagnosticProfiles[profileOfJob(j) || "web"].title}
+                    </small>
+                    <small>
+                      {new Date(j.created_at).toLocaleString("ja-JP")}
+                    </small>
+                  </span>
+                  <span className="badge">{stateLabel(j.state)}</span>
+                </button>
+                <div className="history-actions">
                   <button
-                    className={`history-item ${j.id === jobId ? "selected" : ""}`}
-                    onClick={() => chooseHistory(j)}
+                    className="quiet pdf-button"
+                    disabled={run.isPending || isActive(j.state)}
+                    title={
+                      isActive(j.state)
+                        ? "診断終了後にダウンロードできます"
+                        : "この診断履歴をPDFでダウンロード"
+                    }
+                    onClick={() => downloadPdf(j)}
                   >
-                    <span
-                      className={`history-dot ${isActive(j.state) ? "running" : j.state === "FAILED" ? "failed" : ""}`}
-                    />
-                    <span>
-                      <b>{new URL(j.url).host}</b>
-                      <small>
-                        {diagnosticProfiles[profileOfJob(j) || "web"].title}
-                      </small>
-                      <small>
-                        {new Date(j.created_at).toLocaleString("ja-JP")}
-                      </small>
-                    </span>
-                    <span className="badge">{stateLabel(j.state)}</span>
+                    PDF ↓
                   </button>
-                  <div className="history-actions">
-                    <button
-                      className="quiet pdf-button"
-                      disabled={run.isPending || isActive(j.state)}
-                      title={
-                        isActive(j.state)
-                          ? "診断終了後にダウンロードできます"
-                          : "この診断履歴をPDFでダウンロード"
-                      }
-                      onClick={() => downloadPdf(j)}
-                    >
-                      PDF ↓
-                    </button>
-                    <button
-                      className="quiet danger"
-                      aria-label="診断履歴を削除"
-                      disabled={run.isPending}
-                      onClick={() => deleteHistory(j)}
-                    >
-                      削除
-                    </button>
-                  </div>
+                  <button
+                    className="quiet danger"
+                    aria-label="診断履歴を削除"
+                    disabled={run.isPending}
+                    onClick={() => deleteHistory(j)}
+                  >
+                    削除
+                  </button>
                 </div>
-              ))}
-            </div>
-          </details>
-        )}
+              </div>
+            ))}
+          </div>
+        </section>
       </section>
       <footer>
         SECURITY TESTING <span>観測した事実から、対策へ。</span>

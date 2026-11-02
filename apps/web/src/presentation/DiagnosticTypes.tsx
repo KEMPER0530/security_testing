@@ -27,7 +27,7 @@ export function DiagnosticTypes({
           <small id={`diagnostic-type-${key}`}>{info.summary}</small>
           {historyCounts && (
             <span className="diagnostic-history-count">
-              履歴 {historyCounts[key as ProfileId] || 0}件
+              この対象の履歴 {historyCounts[key as ProfileId] || 0}件
             </span>
           )}
         </button>

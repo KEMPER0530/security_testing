@@ -521,10 +521,97 @@ it.each(["web-job", "network-job"])(
     expect(document.querySelector('[data-history-id="web-job"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "AWSホスト診断" }));
     expect(screen.queryByTestId("diagnosis-report")).toBeNull();
-    await screen.findByText(/AWSホスト診断の履歴はまだありません/);
+    await screen.findByText(/AWSホスト診断の結果が選択中の対象にはありません/);
     expect(
       document.querySelector('[data-history-id="network-job"]'),
     ).toBeNull();
     client.clear();
   },
 );
+
+it("全ページのWeb履歴を全対象から表示し、対象を絞っても古い履歴を残す", async () => {
+  const principal = "history-scope";
+  localStorage.setItem(`security-testing:${principal}:target`, "TARGET#one");
+  localStorage.setItem(`security-testing:${principal}:job`, "new-one");
+  vi.mocked(identity.getUser).mockResolvedValue({
+    access_token: "test-only",
+    expired: false,
+    profile: { sub: principal },
+  } as AuthSession);
+  const targets = ["one", "two"].map((id) => ({
+    sk: `TARGET#${id}`,
+    url: `https://${id}.example/`,
+    host: `${id}.example`,
+    created_at: "2026-11-02T00:00:00Z",
+  }));
+  const jobs = [
+    { id: "new-one", target_id: "one", plan: { profile: "web" } },
+    { id: "old-one", target_id: "one" },
+    { id: "other-two", target_id: "two", plan: { profile: "web" } },
+    { id: "pentest-two", target_id: "two", plan: { profile: "pentest" } },
+  ].map((j) => ({
+    ...j,
+    url: `https://${j.target_id}.example/`,
+    state: "FAILED",
+    created_at: "2026-11-02T00:00:00Z",
+    error: `保存済み結果 ${j.id}`,
+  }));
+  const offsets: string[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const req = input as Request;
+    const url = new URL(req.url);
+    let data: unknown = {};
+    if (url.pathname.endsWith("/targets"))
+      data = { items: targets, next_offset: null };
+    else if (url.pathname.endsWith("/scans")) {
+      offsets.push(url.searchParams.get("offset")!);
+      data =
+        url.searchParams.get("offset") === "0"
+          ? { items: jobs.slice(0, 1), next_offset: 100 }
+          : { items: jobs.slice(1), next_offset: null };
+    } else if (url.pathname.endsWith("/diagnostic-profiles"))
+      data = { profiles: { web: { checks: { headers: "公開設定" } } } };
+    else data = jobs.find((j) => url.pathname.endsWith(`/${j.id}`)) || {};
+    return new Response(JSON.stringify(data), {
+      headers: { "content-type": "application/json" },
+    });
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { container } = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByText("保存済み結果 new-one");
+  await waitFor(() =>
+    expect(container.querySelectorAll("[data-history-id]")).toHaveLength(3),
+  );
+  expect(offsets).toContain("100");
+  expect(container.querySelector('[data-history-id="pentest-two"]')).toBeNull();
+  expect(container.querySelector('[data-history-id="old-one"]')).not.toBeNull();
+  fireEvent.change(screen.getByLabelText("履歴の表示範囲"), {
+    target: { value: "selected" },
+  });
+  expect(container.querySelectorAll("[data-history-id]")).toHaveLength(2);
+  expect(container.querySelector('[data-history-id="old-one"]')).not.toBeNull();
+  expect(container.querySelector('[data-history-id="other-two"]')).toBeNull();
+  fireEvent.change(screen.getByLabelText("履歴の表示範囲"), {
+    target: { value: "all" },
+  });
+  fireEvent.click(
+    container.querySelector('[data-history-id="other-two"] .history-item')!,
+  );
+  await screen.findByText("保存済み結果 other-two");
+  expect(
+    container
+      .querySelector('[data-target-id="TARGET#two"]')
+      ?.getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(container.querySelectorAll("[data-history-id]")).toHaveLength(3);
+  expect(screen.getAllByRole("button", { name: "PDF ↓" })).toHaveLength(3);
+  client.clear();
+});

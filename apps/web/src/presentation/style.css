@@ -695,17 +695,22 @@ td small {
   border-top: 1px solid var(--border);
   padding-top: 22px;
 }
-.history-section summary {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  color: #49675b;
-  min-height: 32px;
+.history-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.history-section summary > span {
-  font-weight: 400;
-  font-size: 11px;
-  margin-left: 6px;
+.history-heading h3 {
+  margin: 0;
+}
+.history-filter {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  max-width: 320px;
+}
+.history-filter select {
+  width: 100%;
 }
 .history {
   display: grid;
